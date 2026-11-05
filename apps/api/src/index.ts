@@ -137,6 +137,27 @@ api.post('/tasks', async (c) => {
   return c.json(task, 201);
 });
 
+api.get('/tasks/:id', (c) => {
+  const id = c.req.param('id');
+  const task = db.getTaskById(id);
+  if (!task) return c.json({ error: 'Task not found' }, 404);
+  return c.json({ task });
+});
+
+api.put('/tasks/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const task = db.getTaskById(id);
+  if (!task) return c.json({ error: 'Task not found' }, 404);
+  if (body.status) task.status = body.status;
+  if (body.title) task.title = body.title;
+  if (body.description !== undefined) task.description = body.description;
+  if (body.priority) task.priority = body.priority;
+  if (body.assignee_name) task.assignee_name = body.assignee_name;
+  task.updated_at = new Date().toISOString();
+  return c.json({ task });
+});
+
 api.put('/tasks/:id/status', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
@@ -293,6 +314,141 @@ api.get('/audit-logs', (c) => {
 });
 
 api.get('/users', (c) => {
+  return c.json(db.users);
+});
+
+// ==================== TIMESHEETS ====================
+let timesheetStatus = 'draft';
+api.get('/timesheets/grid', (c) => {
+  return c.json({
+    status: timesheetStatus,
+    rows: [
+      {
+        task: { key: 'CLOUD-1', title: 'Setup Terraform infrastructure modules for VPC and Kubernetes' },
+        project: { name: 'Platform Cloud Migration' },
+        days: [7.5, 8.0, 6.5, 8.0, 7.5, 0, 0],
+        total: 37.5
+      },
+      {
+        task: { key: 'PORTAL-1', title: 'Build responsive customer metrics dashboard' },
+        project: { name: 'NextGen Client Portal' },
+        days: [4.0, 4.5, 5.0, 4.0, 6.0, 0, 0],
+        total: 23.5
+      },
+      {
+        task: { key: 'MOBILE-1', title: 'Electron tray background process and powerMonitor idle detection' },
+        project: { name: 'Mobile Companion' },
+        days: [3.0, 2.5, 4.0, 3.5, 4.0, 0, 0],
+        total: 17.0
+      }
+    ]
+  });
+});
+
+api.post('/timesheets/submit', (c) => {
+  timesheetStatus = 'submitted';
+  db.addAuditLog('TIMESHEET.SUBMIT', 'webbarracks@gmail.com', 'Submitted weekly timesheet for approval');
+  return c.json({ success: true, status: 'submitted' });
+});
+
+api.post('/timesheets/approve', (c) => {
+  timesheetStatus = 'approved';
+  db.addAuditLog('TIMESHEET.APPROVED', 'webbarracks@gmail.com', 'Approved weekly timesheet');
+  return c.json({ success: true, status: 'approved' });
+});
+
+// ==================== TIME ENTRIES ====================
+const timeEntriesList = [
+  {
+    id: 'entry-1',
+    user_name: 'Elena Rostova',
+    project_name: 'Platform Cloud Migration',
+    task_key: 'CLOUD-1',
+    task_title: 'Setup Terraform infrastructure modules for VPC and Kubernetes',
+    date: '2025-02-18',
+    hours: 4.5,
+    duration_seconds: 16200,
+    billable: true,
+    status: 'approved'
+  },
+  {
+    id: 'entry-2',
+    user_name: 'WebBarracks Super Admin',
+    project_name: 'NextGen Client Portal',
+    task_key: 'PORTAL-1',
+    task_title: 'Build responsive customer metrics dashboard',
+    date: '2025-02-18',
+    hours: 3.0,
+    duration_seconds: 10800,
+    billable: true,
+    status: 'approved'
+  },
+  {
+    id: 'entry-3',
+    user_name: 'Alex Mercer',
+    project_name: 'Mobile Companion',
+    task_key: 'MOBILE-1',
+    task_title: 'Electron tray background process and idle detection',
+    date: '2025-02-17',
+    hours: 5.0,
+    duration_seconds: 18000,
+    billable: true,
+    status: 'approved'
+  }
+];
+
+api.get('/time-entries', (c) => {
+  return c.json(timeEntriesList);
+});
+
+api.post('/time-entries', async (c) => {
+  const body = await c.req.json();
+  const entry = {
+    id: `entry-${Date.now()}`,
+    user_name: 'WebBarracks Super Admin',
+    project_name: body.project_name || 'Platform Cloud Migration',
+    task_key: body.task_key || 'CLOUD-1',
+    task_title: body.task_title || 'General Development',
+    date: body.date || new Date().toISOString().slice(0, 10),
+    hours: Number(body.hours) || 2.0,
+    duration_seconds: (Number(body.hours) || 2.0) * 3600,
+    billable: body.billable !== false,
+    status: 'pending'
+  };
+  timeEntriesList.unshift(entry);
+  db.addAuditLog('TIME.MANUAL_ADD', 'webbarracks@gmail.com', `Logged ${entry.hours}h manually`);
+  return c.json(entry, 201);
+});
+
+// ==================== REPORTS ====================
+api.get('/reports/summary', (c) => {
+  return c.json({
+    totalTrackedHours: 214.5,
+    billableHours: 168.0,
+    billableEfficiency: 78,
+    totalBillableAmount: 18480,
+    projectBreakdown: [
+      { name: 'Platform Cloud Migration', hours: 172.5, billable: 145.0, amount: 15950 },
+      { name: 'Mobile iOS / Android Agent', hours: 42.0, billable: 23.0, amount: 2530 }
+    ]
+  });
+});
+
+api.get('/reports/export/csv', (c) => {
+  const csv = [
+    'Date,User,Project,Task,Hours,Billable,Status',
+    '2025-02-18,Elena Rostova,Platform Cloud Migration,CLOUD-1,4.5,true,approved',
+    '2025-02-18,WebBarracks Super Admin,NextGen Client Portal,PORTAL-1,3.0,true,approved',
+    '2025-02-17,Alex Mercer,Mobile Companion,MOBILE-1,5.0,true,approved'
+  ].join('\n');
+
+  c.header('Content-Type', 'text/csv');
+  c.header('Content-Disposition', 'attachment; filename="webbarracks-report.csv"');
+  return c.text(csv);
+});
+
+// ==================== TEAM ====================
+api.get('/team', (c) => {
   return c.json(db.users);
 });
 

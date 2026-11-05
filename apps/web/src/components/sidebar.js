@@ -8,6 +8,12 @@ export function renderSidebar() {
   const isAdmin = user?.role === 'admin';
   const currentPath = window.location.pathname;
 
+  const chevronSvg = `
+    <svg class="dropdown-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  `;
+
   sidebar.innerHTML = `
     <!-- Top Brand Header -->
     <div class="sidebar-header">
@@ -19,7 +25,7 @@ export function renderSidebar() {
       <button class="sidebar-toggle-btn" title="Toggle Sidebar">&lt;</button>
     </div>
 
-    <!-- Navigation List (Scrollable Left Base) -->
+    <!-- Navigation List (Left Base Scrollable) -->
     <nav class="sidebar-nav">
       <div class="sidebar-group-title">CORE WORKSPACE</div>
 
@@ -31,14 +37,16 @@ export function renderSidebar() {
         </div>
       </a>
 
-      <!-- Projects (Collapsible with Solid Arrow Down / Up) -->
+      <!-- Projects (Collapsible with user requested chevron) -->
       <div class="sidebar-item ${currentPath.startsWith('/projects') ? 'active' : ''}" id="menu-projects-toggle">
         <div class="sidebar-item-left">
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
           <span>Projects</span>
         </div>
-        <span class="solid-arrow expanded" id="projects-arrow">
-          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 6l4 5 4-5z"/></svg>
+        <span id="projects-arrow-wrapper">
+          <svg class="dropdown-chevron expanded" id="projects-arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
         </span>
       </div>
 
@@ -63,9 +71,7 @@ export function renderSidebar() {
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
           <span>Kanban Board</span>
         </div>
-        <span class="solid-arrow-right">
-          <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l5 4-5 4z"/></svg>
-        </span>
+        ${chevronSvg}
       </a>
 
       <!-- Tasks & Backlog -->
@@ -74,9 +80,7 @@ export function renderSidebar() {
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
           <span>Tasks & Backlog</span>
         </div>
-        <span class="solid-arrow-right">
-          <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l5 4-5 4z"/></svg>
-        </span>
+        ${chevronSvg}
       </a>
 
       <div class="sidebar-group-title">TIME & MONITORING</div>
@@ -95,9 +99,7 @@ export function renderSidebar() {
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           <span>Timesheets & Approvals</span>
         </div>
-        <span class="solid-arrow-right">
-          <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l5 4-5 4z"/></svg>
-        </span>
+        ${chevronSvg}
       </a>
 
       <!-- Screen Monitor Gallery -->
@@ -124,9 +126,7 @@ export function renderSidebar() {
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
           <span>Project Reports</span>
         </div>
-        <span class="solid-arrow-right">
-          <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l5 4-5 4z"/></svg>
-        </span>
+        ${chevronSvg}
       </a>
 
       <!-- Team Members -->
@@ -135,9 +135,7 @@ export function renderSidebar() {
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
           <span>Team Directory</span>
         </div>
-        <span class="solid-arrow-right">
-          <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l5 4-5 4z"/></svg>
-        </span>
+        ${chevronSvg}
       </a>
 
       ${
@@ -149,9 +147,7 @@ export function renderSidebar() {
             <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
             <span>User Management</span>
           </div>
-          <span class="solid-arrow-right">
-            <svg width="8" height="8" viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l5 4-5 4z"/></svg>
-          </span>
+          ${chevronSvg}
         </a>
 
         <!-- Audit Logs -->
@@ -187,13 +183,12 @@ export function renderSidebar() {
     </div>
   `;
 
-  // Accordion toggle with solid arrow rotation
+  // Accordion toggle with smooth rotation of user requested chevron
   const projectsToggle = sidebar.querySelector('#menu-projects-toggle');
   const submenuProjects = sidebar.querySelector('#submenu-projects');
   const projectsArrow = sidebar.querySelector('#projects-arrow');
 
-  projectsToggle?.addEventListener('click', (e) => {
-    // If clicking directly on the item (not a child anchor)
+  projectsToggle?.addEventListener('click', () => {
     const isHidden = submenuProjects.style.display === 'none';
     submenuProjects.style.display = isHidden ? 'flex' : 'none';
     if (isHidden) {
