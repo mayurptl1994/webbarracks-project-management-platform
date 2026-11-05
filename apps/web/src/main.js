@@ -7,15 +7,20 @@ import { wsClient } from './core/ws.js';
 import { renderSidebar } from './components/sidebar.js';
 import { renderTopbar } from './components/topbar.js';
 
-// Views
+// Project Management & Time Tracking Views
 import { renderAdminDashboardView } from './views/admin-dashboard.js';
 import { renderUserDashboardView } from './views/user-dashboard.js';
-import { renderUsersView } from './views/users.js';
+import { renderProjectsView } from './views/projects.js';
+import { renderBoardView } from './views/board.js';
+import { renderTasksView } from './views/tasks.js';
 import { renderTrackingView } from './views/tracking.js';
+import { renderTimesheetsView } from './views/timesheets.js';
+import { renderTimeEntriesView } from './views/time-entries.js';
 import { renderScreenshotsView } from './views/screenshots.js';
-import { renderCatalogView } from './views/catalog.js';
-import { renderAuditView } from './views/audit.js';
 import { renderReportsView } from './views/reports.js';
+import { renderTeamView } from './views/team.js';
+import { renderUsersView } from './views/users.js';
+import { renderAuditView } from './views/audit.js';
 import { renderLoginView } from './views/login.js';
 
 async function bootstrap() {
@@ -31,10 +36,14 @@ async function bootstrap() {
     store.setState('currentUser', res.user);
 
     // Fetch active session if any
-    const activeRes = await apiRequest('/tracking/active', {
-      headers: { 'x-user-id': res.user.id }
-    });
-    store.setState('activeSession', activeRes.active);
+    try {
+      const activeRes = await apiRequest('/tracking/active', {
+        headers: { 'x-user-id': res.user.id }
+      });
+      store.setState('activeSession', activeRes.active);
+    } catch {
+      store.setState('activeSession', null);
+    }
 
     // Connect WebSocket
     wsClient.connect();
@@ -56,18 +65,23 @@ async function bootstrap() {
     app.appendChild(sidebar);
     app.appendChild(mainWrapper);
 
-    // Register Routes
+    // Register Routes for Complete Project Management & Time Tracking
     router.setContainer(content);
 
     const defaultDashboard = res.user.role === 'admin' ? renderAdminDashboardView : renderUserDashboardView;
 
     router.register('/', defaultDashboard);
-    router.register('/users', renderUsersView);
+    router.register('/projects', renderProjectsView);
+    router.register('/board', renderBoardView);
+    router.register('/tasks', renderTasksView);
     router.register('/tracking', renderTrackingView);
+    router.register('/timesheets', renderTimesheetsView);
+    router.register('/time-entries', renderTimeEntriesView);
     router.register('/screenshots', renderScreenshotsView);
-    router.register('/catalog', renderCatalogView);
-    router.register('/audit-logs', renderAuditView);
     router.register('/reports', renderReportsView);
+    router.register('/team', renderTeamView);
+    router.register('/users', renderUsersView);
+    router.register('/audit-logs', renderAuditView);
 
     // Navigate to current URL
     router.resolve();

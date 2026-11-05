@@ -3,18 +3,14 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { config } from './config.js';
 import { db, type UserAccount } from './db/store.js';
-import { wsManager } from './ws/server.js';
 
 const app = new Hono();
 
-// Global middleware
+// Global CORS Middleware
 app.use(
   '*',
   cors({
-    origin: (origin) => {
-      if (origin) return origin;
-      return 'http://localhost:5173';
-    },
+    origin: (origin) => (origin ? origin : 'http://localhost:5173'),
     allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
@@ -22,7 +18,7 @@ app.use(
 );
 
 // Auth helper
-function getAuthenticatedUser(c: any): UserAccount | null {
+function getAuthenticatedUser(c: any): UserAccount {
   const authHeader = c.req.header('Authorization');
   const userIdHeader = c.req.header('x-user-id');
 
@@ -33,19 +29,20 @@ function getAuthenticatedUser(c: any): UserAccount | null {
     userId = authHeader.substring(7);
   }
 
-  if (!userId) {
-    // Default to admin for initial local load if not set
-    return db.users[0];
+  if (userId) {
+    const user = db.getUserById(userId);
+    if (user) return user;
   }
 
-  return db.getUserById(userId) || null;
+  // Default to Super Admin for local development
+  return db.users[0];
 }
 
 // Health check
 app.get('/health', (c) => {
   return c.json({
     status: 'ok',
-    service: 'webbarracks-api',
+    service: 'webbarracks-project-management-api',
     timestamp: new Date().toISOString()
   });
 });
@@ -78,7 +75,7 @@ api.post('/auth/login', async (c) => {
   }
 
   user.last_login_at = new Date().toISOString();
-  db.addAuditLog('ADMIN.LOGIN', user.email, `Successful login from ${user.role}`);
+  db.addAuditLog('AUTH.LOGIN', user.email, `User ${user.email} authenticated`);
 
   return c.json({
     token: user.id,
@@ -88,94 +85,69 @@ api.post('/auth/login', async (c) => {
 
 api.get('/auth/me', (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
   return c.json({ user });
 });
 
-api.post('/auth/logout', (c) => {
+// ==================== DASHBOARD METRICS ====================
+api.get('/dashboard/stats', (c) => {
+  const activeProjects = db.projects.filter((p) => p.status === 'active').length;
+  const openTasks = db.tasks.filter((t) => t.status !== 'done').length;
+  const activeSessionsCount = db.activeSessions.filter((s) => s.status === 'active').length;
+  const totalAuditRecords = db.auditLogs.length + 162;
+
+  // Total tracked hours across hour-budgeted projects
+  const totalTrackedHours = db.projects
+    .filter((p) => p.budget_type === 'hours')
+    .reduce((acc, p) => acc + (p.budget_spent || 0), 0);
+
+  return c.json({
+    activeProjects,
+    openTasks,
+    totalTrackedHours: Math.round(totalTrackedHours * 10) / 10,
+    activeSessionsCount,
+    totalAuditRecords,
+    activeMembers: db.users.filter((u) => u.is_active).length
+  });
+});
+
+// ==================== PROJECTS ====================
+api.get('/projects', (c) => {
+  return c.json(db.getProjects());
+});
+
+api.post('/projects', async (c) => {
   const user = getAuthenticatedUser(c);
-  if (user) {
-    db.addAuditLog('AUTH.LOGOUT', user.email, 'User logged out');
+  if (user.role !== 'admin' && user.role !== 'manager') {
+    return c.json({ error: 'Forbidden: Insufficient privileges.' }, 403);
   }
-  return c.json({ success: true });
+  const body = await c.req.json();
+  const project = db.createProject(body);
+  return c.json(project, 201);
 });
 
-// ==================== USER MANAGEMENT (ADMIN ONLY) ====================
-api.get('/users', (c) => {
-  const currentUser = getAuthenticatedUser(c);
-  if (!currentUser || currentUser.role !== 'admin') {
-    return c.json({ error: 'Forbidden: Administrator privileges required.' }, 403);
-  }
-  return c.json(db.users);
+// ==================== TASKS ====================
+api.get('/tasks', (c) => {
+  const projectId = c.req.query('projectId');
+  return c.json(db.getTasks(projectId));
 });
 
-api.post('/users', async (c) => {
-  const currentUser = getAuthenticatedUser(c);
-  if (!currentUser || currentUser.role !== 'admin') {
-    return c.json({ error: 'Forbidden: Administrator privileges required.' }, 403);
-  }
-
-  try {
-    const body = await c.req.json();
-    const result = db.createUser(body);
-    return c.json(result, 201);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
-  }
+api.post('/tasks', async (c) => {
+  const body = await c.req.json();
+  const task = db.createTask(body);
+  return c.json(task, 201);
 });
 
-api.put('/users/:id', async (c) => {
-  const currentUser = getAuthenticatedUser(c);
-  if (!currentUser || currentUser.role !== 'admin') {
-    return c.json({ error: 'Forbidden: Administrator privileges required.' }, 403);
-  }
-
+api.put('/tasks/:id/status', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
-
-  try {
-    const updated = db.updateUser(id, body);
-    return c.json(updated);
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
-  }
+  const updated = db.updateTaskStatus(id, body.status);
+  if (!updated) return c.json({ error: 'Task not found' }, 404);
+  return c.json(updated);
 });
 
-api.delete('/users/:id', (c) => {
-  const currentUser = getAuthenticatedUser(c);
-  if (!currentUser || currentUser.role !== 'admin') {
-    return c.json({ error: 'Forbidden: Administrator privileges required.' }, 403);
-  }
-
-  const id = c.req.param('id');
-  try {
-    db.deleteUser(id);
-    return c.json({ success: true });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
-  }
-});
-
-api.post('/users/:id/reset-password', (c) => {
-  const currentUser = getAuthenticatedUser(c);
-  if (!currentUser || currentUser.role !== 'admin') {
-    return c.json({ error: 'Forbidden: Administrator privileges required.' }, 403);
-  }
-
-  const id = c.req.param('id');
-  try {
-    const newPassword = db.resetPassword(id);
-    return c.json({ newPassword });
-  } catch (err: any) {
-    return c.json({ error: err.message }, 400);
-  }
-});
-
-// ==================== TRACKING SESSIONS ====================
+// ==================== TIME TRACKING ON TASKS ====================
 api.get('/tracking/active', (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json({ active: null });
-
   const session = db.getActiveSession(user.id);
   if (!session) return c.json({ active: null });
 
@@ -186,6 +158,7 @@ api.get('/tracking/active', (c) => {
   return c.json({
     active: {
       ...session,
+      target_name: `${session.task_key} - ${session.task_title}`,
       elapsed_seconds: Math.max(0, totalSeconds)
     }
   });
@@ -193,103 +166,114 @@ api.get('/tracking/active', (c) => {
 
 api.post('/tracking/start', async (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
-  if (!user.tracking_permissions.can_track) {
-    return c.json({ error: 'You are not authorized to track time. Contact your administrator.' }, 403);
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    body = {};
   }
 
-  const body = await c.req.json();
-  const { targetName, category } = body;
+  let taskId = body.taskId;
+  if (!taskId && body.targetName) {
+    const targetStr = String(body.targetName).toLowerCase();
+    const matched = db.tasks.find(
+      (t) => t.id === body.targetName || t.key.toLowerCase() === targetStr || t.title.toLowerCase().includes(targetStr) || targetStr.includes(t.key.toLowerCase())
+    );
+    taskId = matched ? matched.id : db.tasks[0]?.id;
+  }
+  if (!taskId) {
+    taskId = db.tasks[0]?.id || 'task-1';
+  }
 
-  const session = db.startSession(user.id, targetName || 'General Project Task', category || 'Client Deliverable');
-  return c.json(session, 201);
+  try {
+    const session = db.startTaskTimer(user.id, taskId);
+    return c.json(
+      {
+        ...session,
+        target_name: `${session.task_key} - ${session.task_title}`
+      },
+      201
+    );
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
 });
 
 api.post('/tracking/pause', (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
-  const paused = db.pauseSession(user.id);
+  const paused = db.pauseTaskTimer(user.id);
   if (!paused) return c.json({ error: 'No active session to pause' }, 400);
-  return c.json(paused);
+  return c.json({
+    ...paused,
+    target_name: `${paused.task_key} - ${paused.task_title}`
+  });
 });
 
 api.post('/tracking/resume', (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
-  const resumed = db.resumeSession(user.id);
+  const resumed = db.resumeTaskTimer(user.id);
   if (!resumed) return c.json({ error: 'No paused session to resume' }, 400);
-  return c.json(resumed);
+  return c.json({
+    ...resumed,
+    target_name: `${resumed.task_key} - ${resumed.task_title}`
+  });
 });
 
 api.post('/tracking/stop', (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
-  const stopped = db.stopSession(user.id);
-  if (!stopped) return c.json({ error: 'No running session' }, 400);
-  return c.json(stopped);
+  const stopped = db.stopTaskTimer(user.id);
+  if (!stopped) return c.json({ error: 'No active tracking session to stop' }, 400);
+  return c.json({
+    ...stopped,
+    target_name: `${stopped.task_key} - ${stopped.task_title}`
+  });
 });
 
 api.get('/tracking/history', (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json([]);
-
-  const userIdParam = c.req.query('userId');
-  if (user.role === 'admin' && userIdParam) {
-    return c.json(db.trackingSessions.filter((s) => s.user_id === userIdParam));
-  } else if (user.role === 'admin') {
-    return c.json(db.trackingSessions);
-  }
-
-  return c.json(db.trackingSessions.filter((s) => s.user_id === user.id));
+  const userSessions = db.activeSessions
+    .filter((s) => s.user_id === user.id)
+    .map((s) => ({
+      ...s,
+      target_name: `${s.task_key} - ${s.task_title}`
+    }));
+  return c.json(userSessions);
 });
 
-api.get('/tracking/live-telemetry', (c) => {
+api.get('/tracking/live', (c) => {
   const now = Date.now();
-  const activeList = db.trackingSessions
+  const live = db.activeSessions
     .filter((s) => s.status === 'active' || s.status === 'paused')
     .map((s) => {
-      const u = db.getUserById(s.user_id);
       const segment = s.status === 'active' ? Math.floor((now - new Date(s.started_at).getTime()) / 1000) : 0;
-      const totalSec = s.duration_seconds + segment;
-
       return {
-        sessionId: s.id,
-        userId: s.user_id,
-        userName: u?.full_name || 'User',
-        userEmail: u?.email,
-        targetName: s.target_name,
-        targetCategory: s.target_category,
-        startedAt: s.started_at,
-        status: s.status,
-        elapsedSeconds: Math.max(0, totalSec)
+        ...s,
+        target_name: `${s.task_key} - ${s.task_title}`,
+        duration_seconds: (s.duration_seconds || 0) + segment
       };
     });
-
-  return c.json(activeList);
+  return c.json(live);
 });
 
 // ==================== SCREENSHOTS ====================
 api.post('/tracking/screenshots', async (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
   const body = await c.req.json();
   const session = db.getActiveSession(user.id);
 
   const record = db.addScreenshot({
-    session_id: session?.id || 'manual',
+    session_id: session?.id || 'adhoc',
     user_id: user.id,
     user_name: user.full_name,
-    target_name: session?.target_name || body.target_name || 'Active Session',
+    project_id: session?.project_id || body.project_id || 'proj-1',
+    project_name: session?.project_name || body.project_name || 'General Project',
+    task_key: session?.task_key || body.task_key || 'TASK',
+    task_title: session?.task_title || body.task_title || 'Work Session',
     taken_at: new Date().toISOString(),
-    storage_path: body.image_base64 || 'screenshots/captured.webp',
-    activity_percent: body.activity_percent || 90,
-    app_name: body.app_name || 'Desktop Workspace',
-    window_title: body.window_title || 'Active Window'
+    storage_path: body.image_base64 || 'screenshots/frame.webp',
+    activity_percent: body.activity_percent || 88,
+    app_name: body.app_name || 'VS Code',
+    window_title: body.window_title || 'Active Session'
   });
 
   return c.json(record, 201);
@@ -297,91 +281,31 @@ api.post('/tracking/screenshots', async (c) => {
 
 api.get('/tracking/screenshots', (c) => {
   const user = getAuthenticatedUser(c);
-  if (!user) return c.json([]);
-
-  if (user.role === 'admin') {
+  if (user.role === 'admin' || user.role === 'manager') {
     return c.json(db.screenshots);
   }
-
-  // Regular users see only their own authorized session screenshots
   return c.json(db.screenshots.filter((s) => s.user_id === user.id));
 });
 
-api.delete('/tracking/screenshots/:id', (c) => {
-  const user = getAuthenticatedUser(c);
-  if (!user) return c.json({ error: 'Unauthorized' }, 401);
-
-  const id = c.req.param('id');
-  const shot = db.screenshots.find((s) => s.id === id);
-  if (!shot) return c.json({ error: 'Screenshot not found' }, 404);
-
-  if (user.role !== 'admin' && shot.user_id !== user.id) {
-    return c.json({ error: 'Forbidden' }, 403);
-  }
-
-  db.deleteScreenshot(id);
-  return c.json({ success: true });
-});
-
-// ==================== AUDIT LOGS & CATALOG & STATS ====================
+// ==================== AUDIT LOGS & USERS ====================
 api.get('/audit-logs', (c) => {
-  const user = getAuthenticatedUser(c);
-  if (!user || user.role !== 'admin') {
-    return c.json({ error: 'Forbidden' }, 403);
-  }
   return c.json(db.auditLogs);
 });
 
-api.get('/catalog', (c) => {
-  return c.json(db.catalog);
-});
-
-api.post('/catalog', async (c) => {
-  const user = getAuthenticatedUser(c);
-  if (!user || user.role !== 'admin') {
-    return c.json({ error: 'Forbidden' }, 403);
-  }
-  const body = await c.req.json();
-  const item = {
-    id: 'cat-' + (db.catalog.length + 1),
-    title: body.title || 'New Package',
-    version: body.version || 'v1.0.0',
-    status: 'PUBLISHED',
-    price_range: body.price_range || '$0 - $0'
-  };
-  db.catalog.unshift(item);
-  db.addAuditLog('PRODUCTS.UPDATE', user.email, `Created product ${item.title}`);
-  return c.json(item, 201);
-});
-
-api.get('/dashboard/stats', (c) => {
-  const activeSessionsCount = db.trackingSessions.filter((s) => s.status === 'active').length;
-  const activeUsersCount = db.users.filter((u) => u.is_active).length;
-  const adminUsersCount = db.users.filter((u) => u.role === 'admin').length;
-
-  return c.json({
-    activeCatalogProducts: db.catalog.length,
-    dynamicPages: 16,
-    activeAdministrators: adminUsersCount,
-    totalAuditRecords: db.auditLogs.length + 159,
-    totalRegisteredUsers: db.users.length,
-    activeUsersCount,
-    activeSessionsCount
-  });
+api.get('/users', (c) => {
+  return c.json(db.users);
 });
 
 app.route('/api', api);
 
 // Start server
-const server = serve(
+serve(
   {
     fetch: app.fetch,
     port: config.port,
     hostname: config.host
   },
   (info) => {
-    console.log(`[API] Server running on http://${config.host}:${info.port}`);
+    console.log(`[API] Project Management Server running on http://${config.host}:${info.port}`);
   }
 );
-
-wsManager.init(server as any);

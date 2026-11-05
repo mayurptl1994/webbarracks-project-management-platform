@@ -71,12 +71,43 @@ class Router {
   }
 
   updateActiveLinks(path) {
-    document.querySelectorAll('.nav-link').forEach((link) => {
-      const href = link.getAttribute('href');
-      if (href === path || (href !== '/' && path.startsWith(href))) {
-        link.classList.add('active');
+    const titles = {
+      '/': 'Dashboard',
+      '/projects': 'Projects',
+      '/board': 'Kanban Board',
+      '/tasks': 'Tasks & Backlog',
+      '/tracking': 'Task Timer Console',
+      '/timesheets': 'Timesheets & Approvals',
+      '/time-entries': 'Manual Time Log',
+      '/screenshots': 'Screen Monitor Gallery',
+      '/reports': 'Project Reports',
+      '/team': 'Team Directory',
+      '/users': 'User Management',
+      '/audit-logs': 'System Audit Trail'
+    };
+
+    const breadcrumb = document.getElementById('topbar-current-page');
+    if (breadcrumb) {
+      breadcrumb.textContent = titles[path] || 'Workspace';
+    }
+
+    document.querySelectorAll('.sidebar-item').forEach((item) => {
+      const href = item.getAttribute('href');
+      if (href) {
+        if (href === path || (href !== '/' && path.startsWith(href))) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      }
+    });
+
+    document.querySelectorAll('.sidebar-subitem').forEach((item) => {
+      const href = item.getAttribute('href');
+      if (href && (href === path || href.split('?')[0] === path.split('?')[0])) {
+        item.classList.add('active');
       } else {
-        link.classList.remove('active');
+        item.classList.remove('active');
       }
     });
   }

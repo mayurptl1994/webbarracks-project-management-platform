@@ -59,3 +59,4 @@ export async function renderUserDashboardView(container) {
   const embedContainer = container.querySelector('#user-tracking-embed');
   await renderTrackingView(embedContainer);
 }
+

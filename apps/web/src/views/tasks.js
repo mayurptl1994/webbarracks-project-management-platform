@@ -133,3 +133,5 @@ export async function renderTasksListView(container) {
   await loadTasks();
 }
 
+export const renderTasksView = renderTasksListView;
+

@@ -5,7 +5,23 @@ import * as FilePond from 'filepond';
 
 export async function renderTrackingView(container) {
   const user = store.getState('currentUser');
-  const availableTargets = user?.assigned_targets || ['Web Barracks Login Branding Studio', 'Platform Architecture', 'Client Portal Module'];
+  let tasks = [];
+  try {
+    tasks = await apiRequest('/tasks');
+  } catch {
+    tasks = [];
+  }
+
+  const taskOptions = (tasks && tasks.length > 0)
+    ? tasks.map((t) => ({ id: t.id, label: `[${t.key}] ${t.title}` }))
+    : [
+        { id: 'task-1', label: '[CLOUD-1] Setup Terraform infrastructure modules for VPC and Kubernetes' },
+        { id: 'task-2', label: '[PORTAL-1] Build responsive customer metrics dashboard' },
+        { id: 'task-3', label: '[PORTAL-2] Realtime Timesheet Approval Flow' }
+      ];
+
+  let selectedTaskId = taskOptions[0].id;
+  let selectedTarget = taskOptions[0].label;
 
   container.innerHTML = `
     <div style="display: flex; flex-direction: column; gap: 1.5rem; max-width: 960px;">
@@ -37,14 +53,14 @@ export async function renderTrackingView(container) {
 
         <!-- Target Selector (NiceSelect Styled) -->
         <div style="margin-bottom: 1.25rem;">
-          <label style="display: block; font-size: 0.8125rem; font-weight: 700; margin-bottom: 0.35rem;">Assigned Tracking Target / Deliverable *</label>
+          <label style="display: block; font-size: 0.8125rem; font-weight: 700; margin-bottom: 0.35rem;">Assigned Project Task / Deliverable *</label>
           <div class="nice-select-custom" id="custom-target-select">
             <div class="nice-select-trigger" id="target-trigger">
-              <span id="selected-target-label">${availableTargets[0] || 'General Project Task'}</span>
+              <span id="selected-target-label">${taskOptions[0].label}</span>
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
             </div>
             <div class="nice-select-dropdown" id="target-dropdown">
-              ${availableTargets.map((t, idx) => `<div class="nice-select-option ${idx === 0 ? 'selected' : ''}" data-value="${t}">${t}</div>`).join('')}
+              ${taskOptions.map((t, idx) => `<div class="nice-select-option ${idx === 0 ? 'selected' : ''}" data-task-id="${t.id}" data-value="${t.label}">${t.label}</div>`).join('')}
             </div>
           </div>
         </div>
@@ -120,7 +136,6 @@ export async function renderTrackingView(container) {
   `;
 
   // Initialize NiceSelect Dropdown Logic
-  let selectedTarget = availableTargets[0] || 'General Project Task';
   const trigger = container.querySelector('#target-trigger');
   const dropdown = container.querySelector('#target-dropdown');
   const label = container.querySelector('#selected-target-label');
@@ -132,6 +147,7 @@ export async function renderTrackingView(container) {
   dropdown.querySelectorAll('.nice-select-option').forEach((opt) => {
     opt.addEventListener('click', () => {
       selectedTarget = opt.getAttribute('data-value');
+      selectedTaskId = opt.getAttribute('data-task-id') || selectedTaskId;
       label.textContent = selectedTarget;
       dropdown.querySelectorAll('.nice-select-option').forEach((o) => o.classList.remove('selected'));
       opt.classList.add('selected');
@@ -236,7 +252,7 @@ export async function renderTrackingView(container) {
     try {
       const session = await apiRequest('/tracking/start', {
         method: 'POST',
-        body: JSON.stringify({ targetName: selectedTarget })
+        body: JSON.stringify({ taskId: selectedTaskId, targetName: selectedTarget })
       });
       store.setState('activeSession', session);
       syncUI(session);
@@ -316,3 +332,4 @@ export async function renderTrackingView(container) {
 
   await loadHistory();
 }
+

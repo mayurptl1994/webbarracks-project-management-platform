@@ -43,10 +43,10 @@ export function renderTopbar() {
         Production Ready
       </div>
 
-      <!-- Public Site Link -->
+      <!-- Timer Console Link -->
       <a href="/tracking" data-link class="btn-wb-outline" style="font-size: 0.75rem; padding: 0.35rem 0.75rem;">
-        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-        <span>Public Site</span>
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>Timer Console</span>
       </a>
 
       <!-- Sign Out Button matching screenshot -->
