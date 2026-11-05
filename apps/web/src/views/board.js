@@ -4,17 +4,17 @@ import { openDrawer, openModal } from '../components/modal.js';
 
 export async function renderBoardView(container) {
   const urlParams = new URLSearchParams(window.location.search);
-  let currentProjectId = urlParams.get('projectId') || '';
+  let currentClientId = urlParams.get('clientId') || '';
 
   container.innerHTML = `
     <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-      <!-- Board Header & Project Selector -->
+      <!-- Board Header & Client Selector -->
       <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
         <div>
           <div style="display: flex; align-items: center; gap: 0.75rem;">
             <h1 style="font-size: 1.625rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">Kanban Board</h1>
-            <select id="select-board-project" style="padding: 0.4rem 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--bg-surface); font-weight: 600; font-size: 0.875rem; color: var(--text-primary);">
-              <option value="">All Projects</option>
+            <select id="select-board-client" style="padding: 0.4rem 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--bg-surface); font-weight: 600; font-size: 0.875rem; color: var(--text-primary);">
+              <option value="">All Clients</option>
             </select>
           </div>
           <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">
@@ -41,28 +41,28 @@ export async function renderBoardView(container) {
     </div>
   `;
 
-  // 1. Load Projects into selector
+  // 1. Load Clients into selector
   try {
-    const projects = await apiRequest('/projects');
-    const projectSelect = container.querySelector('#select-board-project');
-    if (projects && projects.length > 0) {
-      projects.forEach((p) => {
+    const clients = await apiRequest('/clients');
+    const clientSelect = container.querySelector('#select-board-client');
+    if (clients && clients.length > 0) {
+      clients.forEach((c) => {
         const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = `${p.key} - ${p.name}`;
-        if (p.id === currentProjectId) opt.selected = true;
-        projectSelect.appendChild(opt);
+        opt.value = c.id;
+        opt.textContent = `${c.name} (${c.currency} ${c.hourly_rate}/hr)`;
+        if (c.id === currentClientId) opt.selected = true;
+        clientSelect.appendChild(opt);
       });
     }
 
-    projectSelect.addEventListener('change', (e) => {
-      currentProjectId = e.target.value;
-      const newUrl = currentProjectId ? `/board?projectId=${currentProjectId}` : '/board';
+    clientSelect.addEventListener('change', (e) => {
+      currentClientId = e.target.value;
+      const newUrl = currentClientId ? `/board?clientId=${currentClientId}` : '/board';
       window.history.pushState(null, '', newUrl);
       loadBoardTasks();
     });
   } catch (err) {
-    console.error('Failed to load projects for board:', err);
+    console.error('Failed to load clients for board:', err);
   }
 
   const COLUMNS = [
@@ -76,8 +76,10 @@ export async function renderBoardView(container) {
   // 2. Load Tasks and Render Kanban Columns
   const loadBoardTasks = async () => {
     try {
-      const endpoint = currentProjectId ? `/tasks?projectId=${currentProjectId}` : '/tasks';
-      const tasks = await apiRequest(endpoint);
+      let tasks = await apiRequest('/tasks');
+      if (currentClientId) {
+        tasks = tasks.filter((t) => t.client_id === currentClientId);
+      }
       const activeSession = store.getState('activeSession');
       const boardContainer = container.querySelector('#kanban-container');
 
@@ -192,7 +194,7 @@ export async function renderBoardView(container) {
       boardContainer.querySelectorAll('.btn-quick-add').forEach((btn) => {
         btn.addEventListener('click', () => {
           const colStatus = btn.getAttribute('data-status');
-          showCreateTaskModal(colStatus, currentProjectId, loadBoardTasks);
+          showCreateTaskModal(colStatus, currentClientId, loadBoardTasks);
         });
       });
     } catch (err) {
@@ -204,7 +206,7 @@ export async function renderBoardView(container) {
 
   // Create Task button
   container.querySelector('#btn-create-task')?.addEventListener('click', () => {
-    showCreateTaskModal('todo', currentProjectId, loadBoardTasks);
+    showCreateTaskModal('todo', currentClientId, loadBoardTasks);
   });
 }
 
@@ -345,23 +347,32 @@ async function openTaskDetailDrawer(taskId, onUpdate) {
 }
 
 // Create Task Modal
-function showCreateTaskModal(defaultStatus, defaultProjectId, onSuccess) {
+async function showCreateTaskModal(defaultStatus, defaultClientId, onSuccess) {
+  let clients = [];
+  try {
+    clients = await apiRequest('/clients');
+  } catch {
+    clients = [];
+  }
+
+  const clientOptions = clients.length > 0
+    ? clients.map((c) => `<option value="${c.id}" ${defaultClientId === c.id ? 'selected' : ''}>${c.name} (${c.currency} ${c.hourly_rate}/hr)</option>`).join('')
+    : '<option value="">No clients configured</option>';
+
   openModal({
     title: 'Create New Task',
     contentHtml: `
       <form id="form-modal-create-task" style="display: flex; flex-direction: column; gap: 1rem;">
         <div>
           <label style="display: block; font-size: 0.8125rem; font-weight: 700; margin-bottom: 0.25rem;">Task Title *</label>
-          <input name="title" required placeholder="e.g. Implement Redis caching layer" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-family: var(--font-sans);" />
+          <input name="title" required placeholder="e.g. Implement client portal SSO" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-md); font-family: var(--font-sans);" />
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
           <div>
-            <label style="display: block; font-size: 0.8125rem; font-weight: 700; margin-bottom: 0.25rem;">Project *</label>
-            <select name="project_id" required style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-md);">
-              <option value="proj-1" ${defaultProjectId === 'proj-1' ? 'selected' : ''}>CLOUD - Enterprise Cloud Migration</option>
-              <option value="proj-2" ${defaultProjectId === 'proj-2' ? 'selected' : ''}>PORTAL - Client Portal V2</option>
-              <option value="proj-3" ${defaultProjectId === 'proj-3' ? 'selected' : ''}>MOBILE - Mobile Companion</option>
+            <label style="display: block; font-size: 0.8125rem; font-weight: 700; margin-bottom: 0.25rem;">Client (Tariff) *</label>
+            <select name="client_id" required style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-strong); border-radius: var(--radius-md);">
+              ${clientOptions}
             </select>
           </div>
           <div>
@@ -411,7 +422,7 @@ function showCreateTaskModal(defaultStatus, defaultProjectId, onSuccess) {
           method: 'POST',
           body: JSON.stringify({
             title: fd.get('title'),
-            project_id: fd.get('project_id'),
+            client_id: fd.get('client_id'),
             priority: fd.get('priority'),
             description: fd.get('description'),
             estimate_hours: Number(fd.get('estimate_hours')) || 4,

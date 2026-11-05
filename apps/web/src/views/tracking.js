@@ -1,335 +1,498 @@
 import { apiRequest } from '../core/api.js';
 import { store } from '../core/store.js';
-import { captureManager } from '../core/capture.js';
+import { createTrackerBar } from '../components/tracker-bar.js';
+import { CURRENCY_SYMBOLS, formatRateWithCurrency } from './clients.js';
+import { openTimeEntryModal } from '../components/time-entry-modal.js';
 import * as FilePond from 'filepond';
 
 export async function renderTrackingView(container) {
   const user = store.getState('currentUser');
-  let tasks = [];
-  try {
-    tasks = await apiRequest('/tasks');
-  } catch {
-    tasks = [];
-  }
-
-  const taskOptions = (tasks && tasks.length > 0)
-    ? tasks.map((t) => ({ id: t.id, label: `[${t.key}] ${t.title}` }))
-    : [
-        { id: 'task-1', label: '[CLOUD-1] Setup Terraform infrastructure modules for VPC and Kubernetes' },
-        { id: 'task-2', label: '[PORTAL-1] Build responsive customer metrics dashboard' },
-        { id: 'task-3', label: '[PORTAL-2] Realtime Timesheet Approval Flow' }
-      ];
-
-  let selectedTaskId = taskOptions[0].id;
-  let selectedTarget = taskOptions[0].label;
 
   container.innerHTML = `
-    <div style="display: flex; flex-direction: column; gap: 1.5rem; max-width: 960px;">
-      <!-- Header -->
+    <div style="display: flex; flex-direction: column; gap: 1.75rem;">
+      <!-- Page Header -->
       <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
         <div>
-          <h1 style="font-size: 1.625rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">Tracking Console</h1>
+          <h1 style="font-size: 1.625rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">Time Tracker</h1>
           <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">
-            User-specific time tracking and authorized background monitoring for <strong>${user?.full_name || 'User'}</strong>.
+            Real-time timer console, client tariff billing, and activity log for <strong>${user?.full_name || 'User'}</strong>.
           </p>
         </div>
-      </div>
 
-      <!-- Active Session Control Console Card -->
-      <div class="wb-card" style="border: 1px solid var(--border-strong); box-shadow: 0 2px 4px rgba(0,0,0,0.04);">
-        <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-default); padding-bottom: 1rem; margin-bottom: 1.25rem;">
-          <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <div id="tracking-status-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: #94a3b8;"></div>
-            <div>
-              <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">TRACKING STATUS</div>
-              <div id="tracking-status-text" style="font-size: 1rem; font-weight: 700;">Idle (No Session Active)</div>
-            </div>
-          </div>
-
-          <div id="clock-display" style="font-family: var(--font-mono); font-size: 2.25rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary);">
-            00:00:00
-          </div>
-        </div>
-
-        <!-- Target Selector (NiceSelect Styled) -->
-        <div style="margin-bottom: 1.25rem;">
-          <label style="display: block; font-size: 0.8125rem; font-weight: 700; margin-bottom: 0.35rem;">Assigned Project Task / Deliverable *</label>
-          <div class="nice-select-custom" id="custom-target-select">
-            <div class="nice-select-trigger" id="target-trigger">
-              <span id="selected-target-label">${taskOptions[0].label}</span>
-              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7"/></svg>
-            </div>
-            <div class="nice-select-dropdown" id="target-dropdown">
-              ${taskOptions.map((t, idx) => `<div class="nice-select-option ${idx === 0 ? 'selected' : ''}" data-task-id="${t.id}" data-value="${t.label}">${t.label}</div>`).join('')}
-            </div>
-          </div>
-        </div>
-
-        <!-- Disclosed Monitoring Transparency Notice -->
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 0.875rem 1rem; margin-bottom: 1.25rem; font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5;">
-          <div style="display: flex; align-items: center; gap: 0.5rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.25rem;">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <span>User-Authorized Monitoring Disclosure</span>
-          </div>
-          Starting this session enables background screenshot capture at your configured interval (every ${user?.tracking_permissions?.screenshot_interval_minutes || 5} min). Capture only occurs while this session is active.
-        </div>
-
-        <!-- Controls (Start / Pause / Resume / Stop) -->
         <div style="display: flex; align-items: center; gap: 0.75rem;">
-          <button id="btn-start-session" class="btn-wb-primary" style="padding: 0.625rem 1.25rem; font-size: 0.875rem;">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
-            <span>Start Authorized Session</span>
-          </button>
-
-          <button id="btn-pause-session" class="btn-wb-outline" style="display: none; padding: 0.625rem 1.25rem; font-size: 0.875rem;">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 9v6m4-6v6"/></svg>
-            <span>Pause</span>
-          </button>
-
-          <button id="btn-resume-session" class="btn-wb-primary" style="display: none; padding: 0.625rem 1.25rem; font-size: 0.875rem;">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/></svg>
-            <span>Resume</span>
-          </button>
-
-          <button id="btn-stop-session" class="btn-wb-outline" style="display: none; padding: 0.625rem 1.25rem; font-size: 0.875rem; color: var(--status-danger); border-color: #fecaca;">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
-            <span>Stop &amp; Save Session</span>
-          </button>
+          <a href="/clients" data-link class="btn-wb-outline" style="font-size: 0.8125rem;">
+            <span>Manage Client Rates</span>
+          </a>
         </div>
       </div>
 
-      <!-- FilePond Document / Attachment Upload Section -->
-      <div class="wb-card">
-        <div class="wb-card-header">
-          <div>
-            <div class="wb-card-title">Session Deliverables &amp; Artifact Uploads</div>
-            <div class="wb-card-subtitle">FilePond integrated: Drag and drop project assets, code diffs, or review documents</div>
+      <!-- Reference Time Tracker Bar Mount -->
+      <div id="tracker-bar-mount-point"></div>
+
+      <!-- Quick Summary Metric Bar -->
+      <div class="grid-4-cols" id="tracking-quick-metrics">
+        <div class="wb-stat-card">
+          <div class="wb-stat-label">TOTAL TIME LOGGED</div>
+          <div class="wb-stat-value" id="metric-total-time">00:00:00</div>
+          <div class="wb-stat-subtext">Across all recent sessions</div>
+        </div>
+
+        <div class="wb-stat-card">
+          <div class="wb-stat-label">BILLABLE HOURS</div>
+          <div class="wb-stat-value" id="metric-billable-hours" style="color: #10b981;">0.0h</div>
+          <div class="wb-stat-subtext">Eligible for client invoicing</div>
+        </div>
+
+        <div class="wb-stat-card">
+          <div class="wb-stat-label">BILLABLE EARNINGS</div>
+          <div class="wb-stat-value" id="metric-billable-value" style="color: #047857;">$0.00</div>
+          <div class="wb-stat-subtext">Calculated at client tariffs</div>
+        </div>
+
+        <div class="wb-stat-card">
+          <div class="wb-stat-label">LOGGED ENTRIES</div>
+          <div class="wb-stat-value" id="metric-entries-count">0</div>
+          <div class="wb-stat-subtext">Completed session records</div>
+        </div>
+      </div>
+
+      <!-- Time Entries Section Header & Filter Controls -->
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <h2 style="font-size: 1.125rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em;">Logged Time Entries</h2>
+            <span id="entries-count-badge" style="font-size: 0.75rem; font-weight: 700; color: #475569; background: #e2e8f0; padding: 2px 8px; border-radius: 9999px;">0</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+            <input 
+              id="input-entries-search" 
+              type="search" 
+              placeholder="Filter entries by description or client..." 
+              style="padding: 0.4rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--bg-surface); font-size: 0.8125rem; width: 260px;" 
+            />
+            <select id="select-filter-client" style="padding: 0.4rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--bg-surface); font-size: 0.8125rem;">
+              <option value="">All Clients</option>
+            </select>
+            <select id="select-filter-billable" style="padding: 0.4rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--bg-surface); font-size: 0.8125rem;">
+              <option value="">All Statuses</option>
+              <option value="billable">Billable Only ($)</option>
+              <option value="non_billable">Non-Billable</option>
+            </select>
           </div>
         </div>
 
-        <input type="file" class="filepond" id="filepond-uploader" multiple data-max-file-size="10MB" data-max-files="5" />
-      </div>
-
-      <!-- Tracking Session History -->
-      <div class="wb-card" style="padding: 0; overflow-x: auto;">
-        <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-default);">
-          <div class="wb-card-title">Session History &amp; Records</div>
-          <div class="wb-card-subtitle">Logged sessions with precise timestamps and durations</div>
+        <!-- Grouped Time Entries Container -->
+        <div id="entries-groups-container" class="wb-entries-list">
+          <div style="text-align: center; padding: 3rem; color: var(--text-muted); background: #ffffff; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg);">
+            Loading time entries...
+          </div>
         </div>
-
-        <table class="wb-table">
-          <thead>
-            <tr>
-              <th>DATE &amp; TIME</th>
-              <th>TARGET POINT</th>
-              <th>DURATION</th>
-              <th>MONITORING</th>
-              <th>STATUS</th>
-            </tr>
-          </thead>
-          <tbody id="session-history-body">
-            <tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading session history...</td></tr>
-          </tbody>
-        </table>
       </div>
+
+      <!-- Collapsible Monitoring & File Deliverables Section -->
+      <details style="background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 1rem 1.25rem; cursor: pointer;">
+        <summary style="font-size: 0.875rem; font-weight: 700; color: var(--text-primary); outline: none; user-select: none;">
+          Session Attachments &amp; Activity Monitoring Info
+        </summary>
+        <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 1rem; cursor: default;">
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 0.75rem 1rem; font-size: 0.8125rem; color: var(--text-secondary);">
+            <strong>Authorized Transparency:</strong> Screen monitoring captures active work sessions at your provisioned frequency (${user?.tracking_permissions?.screenshot_interval_minutes || 5} min). Capture only runs while the timer is actively ticking.
+          </div>
+          <div>
+            <div style="font-size: 0.8125rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);">
+              Upload Deliverable Artifacts (FilePond)
+            </div>
+            <input type="file" class="filepond" id="filepond-uploader" multiple data-max-file-size="10MB" data-max-files="5" />
+          </div>
+        </div>
+      </details>
     </div>
   `;
 
-  // Initialize NiceSelect Dropdown Logic
-  const trigger = container.querySelector('#target-trigger');
-  const dropdown = container.querySelector('#target-dropdown');
-  const label = container.querySelector('#selected-target-label');
+  // Mount the Reference Time Tracker Bar
+  const trackerMount = container.querySelector('#tracker-bar-mount-point');
+  let trackerInstance = null;
 
-  trigger.addEventListener('click', () => {
-    dropdown.classList.toggle('open');
-  });
-
-  dropdown.querySelectorAll('.nice-select-option').forEach((opt) => {
-    opt.addEventListener('click', () => {
-      selectedTarget = opt.getAttribute('data-value');
-      selectedTaskId = opt.getAttribute('data-task-id') || selectedTaskId;
-      label.textContent = selectedTarget;
-      dropdown.querySelectorAll('.nice-select-option').forEach((o) => o.classList.remove('selected'));
-      opt.classList.add('selected');
-      dropdown.classList.remove('open');
-    });
-  });
-
-  document.addEventListener('click', (e) => {
-    if (!trigger.contains(e.target) && !dropdown.contains(e.target)) {
-      dropdown.classList.remove('open');
+  trackerInstance = createTrackerBar({
+    onEntryLogged: () => {
+      loadEntries();
     }
   });
+  trackerMount.appendChild(trackerInstance.element);
 
   // Initialize FilePond
   const pondInput = container.querySelector('#filepond-uploader');
-  const pond = FilePond.create(pondInput, {
-    allowMultiple: true,
-    name: 'deliverables',
-    labelIdle: 'Drag & Drop your session files or <span class="filepond--label-action">Browse</span>'
-  });
+  if (pondInput) {
+    FilePond.create(pondInput, {
+      allowMultiple: true,
+      name: 'deliverables',
+      labelIdle: 'Drag & Drop deliverable diffs, assets, or <span class="filepond--label-action">Browse</span>'
+    });
+  }
 
-  // Timer Tick Mechanism
-  let tickInterval = null;
-  const clockEl = container.querySelector('#clock-display');
-  const indicatorEl = container.querySelector('#tracking-status-indicator');
-  const statusTextEl = container.querySelector('#tracking-status-text');
+  // Load and List Entries
+  let allEntries = [];
+  let availableClients = [];
 
-  const btnStart = container.querySelector('#btn-start-session');
-  const btnPause = container.querySelector('#btn-pause-session');
-  const btnResume = container.querySelector('#btn-resume-session');
-  const btnStop = container.querySelector('#btn-stop-session');
-
-  const syncUI = (session) => {
-    clearInterval(tickInterval);
-
-    if (!session || session.status === 'completed') {
-      indicatorEl.style.background = '#94a3b8';
-      indicatorEl.className = '';
-      statusTextEl.textContent = 'Idle (No Session Active)';
-      clockEl.textContent = '00:00:00';
-
-      btnStart.style.display = 'inline-flex';
-      btnPause.style.display = 'none';
-      btnResume.style.display = 'none';
-      btnStop.style.display = 'none';
-      captureManager.stopCapture();
-    } else if (session.status === 'active') {
-      indicatorEl.style.background = '#dc2626';
-      indicatorEl.className = 'pulse-dot';
-      statusTextEl.innerHTML = `<span style="color: #dc2626; font-weight: 700;">Recording Active:</span> ${session.target_name}`;
-
-      btnStart.style.display = 'none';
-      btnPause.style.display = 'inline-flex';
-      btnResume.style.display = 'none';
-      btnStop.style.display = 'inline-flex';
-
-      const updateClock = () => {
-        const now = Date.now();
-        const segment = Math.floor((now - new Date(session.started_at).getTime()) / 1000);
-        const total = (session.duration_seconds || 0) + segment;
-
-        const h = String(Math.floor(total / 3600)).padStart(2, '0');
-        const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
-        const s = String(total % 60).padStart(2, '0');
-        clockEl.textContent = `${h}:${m}:${s}`;
-      };
-
-      updateClock();
-      tickInterval = setInterval(updateClock, 1000);
-
-      // Start screen capture
-      captureManager.startCapture();
-    } else if (session.status === 'paused') {
-      indicatorEl.style.background = '#f59e0b';
-      indicatorEl.className = '';
-      statusTextEl.innerHTML = `<span style="color: #f59e0b; font-weight: 700;">Paused:</span> ${session.target_name}`;
-
-      const total = session.duration_seconds || 0;
-      const h = String(Math.floor(total / 3600)).padStart(2, '0');
-      const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
-      const s = String(total % 60).padStart(2, '0');
-      clockEl.textContent = `${h}:${m}:${s}`;
-
-      btnStart.style.display = 'none';
-      btnPause.style.display = 'none';
-      btnResume.style.display = 'inline-flex';
-      btnStop.style.display = 'inline-flex';
-    }
-  };
-
-  // Check active session on load
-  const loadActive = async () => {
-    const res = await apiRequest('/tracking/active');
-    store.setState('activeSession', res.active);
-    syncUI(res.active);
-  };
-
-  await loadActive();
-
-  // Button actions
-  btnStart.addEventListener('click', async () => {
+  const loadClientsFilter = async () => {
     try {
-      const session = await apiRequest('/tracking/start', {
-        method: 'POST',
-        body: JSON.stringify({ taskId: selectedTaskId, targetName: selectedTarget })
-      });
-      store.setState('activeSession', session);
-      syncUI(session);
-      loadHistory();
-    } catch (err) {
-      alert('Failed to start session: ' + err.message);
-    }
-  });
-
-  btnPause.addEventListener('click', async () => {
-    try {
-      const session = await apiRequest('/tracking/pause', { method: 'POST' });
-      store.setState('activeSession', session);
-      syncUI(session);
-      loadHistory();
-    } catch (err) {
-      alert('Error pausing session: ' + err.message);
-    }
-  });
-
-  btnResume.addEventListener('click', async () => {
-    try {
-      const session = await apiRequest('/tracking/resume', { method: 'POST' });
-      store.setState('activeSession', session);
-      syncUI(session);
-      loadHistory();
-    } catch (err) {
-      alert('Error resuming session: ' + err.message);
-    }
-  });
-
-  btnStop.addEventListener('click', async () => {
-    try {
-      await apiRequest('/tracking/stop', { method: 'POST' });
-      store.setState('activeSession', null);
-      syncUI(null);
-      loadHistory();
-    } catch (err) {
-      alert('Error stopping session: ' + err.message);
-    }
-  });
-
-  // Load Session History
-  const loadHistory = async () => {
-    try {
-      const history = await apiRequest('/tracking/history');
-      const tbody = container.querySelector('#session-history-body');
-
-      if (history.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-muted);">No tracked sessions yet.</td></tr>`;
-        return;
+      availableClients = await apiRequest('/clients');
+      const clientSelect = container.querySelector('#select-filter-client');
+      if (clientSelect && availableClients.length > 0) {
+        availableClients.forEach((c) => {
+          const opt = document.createElement('option');
+          opt.value = c.id;
+          opt.textContent = `${c.name} (${c.currency} ${c.hourly_rate}/hr)`;
+          clientSelect.appendChild(opt);
+        });
       }
-
-      tbody.innerHTML = history
-        .map((s) => {
-          const dateStr = new Date(s.started_at).toLocaleString();
-          const mins = Math.floor((s.duration_seconds || 0) / 60);
-          const secs = (s.duration_seconds || 0) % 60;
-
-          return `
-          <tr>
-            <td style="font-family: var(--font-mono); font-size: 0.75rem;">${dateStr}</td>
-            <td style="font-weight: 700; color: var(--text-primary);">${s.target_name}</td>
-            <td style="font-family: var(--font-mono); font-weight: 600;">${mins}m ${secs}s</td>
-            <td><span class="status-pill-published" style="background: #10b981;">Authorized</span></td>
-            <td><span class="action-log-badge">${s.status.toUpperCase()}</span></td>
-          </tr>
-        `;
-        })
-        .join('');
     } catch (err) {
-      container.querySelector('#session-history-body').innerHTML = `
-        <tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--status-danger);">Failed to load history: ${err.message}</td></tr>
+      console.warn('Failed to load client filter:', err);
+    }
+  };
+
+  const loadEntries = async () => {
+    try {
+      allEntries = await apiRequest('/time-entries');
+      updateMetrics(allEntries);
+      renderEntriesList(filterEntries());
+    } catch (err) {
+      container.querySelector('#entries-groups-container').innerHTML = `
+        <div style="text-align: center; padding: 2rem; color: var(--status-danger); background: #ffffff; border: 1px solid var(--border-default); border-radius: var(--radius-lg);">
+          Failed to load time entries: ${err.message}
+        </div>
       `;
     }
   };
 
-  await loadHistory();
-}
+  const updateMetrics = (entries) => {
+    const totalSec = entries.reduce((acc, e) => acc + (Number(e.duration_seconds) || 0), 0);
+    const billableHours = entries.filter((e) => e.billable).reduce((acc, e) => acc + (Number(e.hours) || 0), 0);
+    const billableAmount = entries.filter((e) => e.billable).reduce((acc, e) => acc + (Number(e.billable_amount) || 0), 0);
 
+    const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+    const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+    const s = String(totalSec % 60).padStart(2, '0');
+
+    container.querySelector('#metric-total-time').textContent = `${h}:${m}:${s}`;
+    container.querySelector('#metric-billable-hours').textContent = `${billableHours.toFixed(1)}h`;
+    container.querySelector('#metric-billable-value').textContent = `$${billableAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    container.querySelector('#metric-entries-count').textContent = entries.length;
+    container.querySelector('#entries-count-badge').textContent = entries.length;
+  };
+
+  const filterEntries = () => {
+    const query = (container.querySelector('#input-entries-search')?.value || '').toLowerCase().trim();
+    const clientId = container.querySelector('#select-filter-client')?.value || '';
+    const billableFilter = container.querySelector('#select-filter-billable')?.value || '';
+
+    return allEntries.filter((e) => {
+      const matchQuery =
+        !query ||
+        (e.description && e.description.toLowerCase().includes(query)) ||
+        (e.task_title && e.task_title.toLowerCase().includes(query)) ||
+        (e.client_name && e.client_name.toLowerCase().includes(query));
+
+      const matchClient = !clientId || e.client_id === clientId;
+      const matchBillable =
+        !billableFilter ||
+        (billableFilter === 'billable' && e.billable) ||
+        (billableFilter === 'non_billable' && !e.billable);
+
+      return matchQuery && matchClient && matchBillable;
+    });
+  };
+
+  const renderEntriesList = (entries) => {
+    const listContainer = container.querySelector('#entries-groups-container');
+
+    if (!entries || entries.length === 0) {
+      listContainer.innerHTML = `
+        <div style="text-align: center; padding: 3rem; color: var(--text-muted); background: #ffffff; border: 1px dashed var(--border-strong); border-radius: var(--radius-lg);">
+          No time entries found. Type what you are working on above and click <strong>START</strong>!
+        </div>
+      `;
+      return;
+    }
+
+    // Group entries by Date (e.g. YYYY-MM-DD)
+    const groups = {};
+    entries.forEach((e) => {
+      const dateKey = e.date || new Date().toISOString().slice(0, 10);
+      if (!groups[dateKey]) groups[dateKey] = [];
+      groups[dateKey].push(e);
+    });
+
+    const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+    listContainer.innerHTML = sortedDates
+      .map((dateKey) => {
+        const groupEntries = groups[dateKey];
+        const daySec = groupEntries.reduce((acc, e) => acc + (Number(e.duration_seconds) || 0), 0);
+        const dayAmount = groupEntries.reduce((acc, e) => acc + (Number(e.billable_amount) || 0), 0);
+
+        const groupCurrencies = [...new Set(groupEntries.map((e) => e.client_currency).filter(Boolean))];
+        const groupSym = groupCurrencies.length === 1 ? (CURRENCY_SYMBOLS[groupCurrencies[0]] || '$') : '$';
+
+        const dh = String(Math.floor(daySec / 3600)).padStart(2, '0');
+        const dm = String(Math.floor((daySec % 3600) / 60)).padStart(2, '0');
+        const ds = String(daySec % 60).padStart(2, '0');
+
+        let label = dateKey;
+        if (dateKey === todayStr) label = 'Today';
+        else if (dateKey === yesterdayStr) label = 'Yesterday';
+        else {
+          try {
+            label = new Date(dateKey + 'T00:00:00').toLocaleDateString(undefined, {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric'
+            });
+          } catch {
+            label = dateKey;
+          }
+        }
+
+        const entriesHtml = groupEntries
+          .map((entry) => {
+            const sec = Number(entry.duration_seconds) || 0;
+            const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+            const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+            const s = String(sec % 60).padStart(2, '0');
+            const durationStr = `${h}:${m}:${s}`;
+
+            const timeRange = entry.start_time && entry.end_time ? `${entry.start_time} - ${entry.end_time}` : '';
+            const currency = entry.client_currency || 'USD';
+            const sym = CURRENCY_SYMBOLS[currency] || '$';
+            const clientRate = entry.client_rate ? `${sym}${entry.client_rate}/hr` : '';
+
+            const billableIcon = entry.billable
+              ? `<span style="color: #047857; font-weight: 700; font-size: 0.875rem; background: #ecfdf5; padding: 2px 6px; border-radius: 4px;" title="Billable: ${sym}${(entry.billable_amount || 0).toFixed(2)}">$</span>`
+              : `<span style="color: #94a3b8; font-size: 0.875rem;" title="Non-billable">⊘</span>`;
+
+            const taskName = entry.task_name || entry.task_title || 'General Client Work';
+
+            // Format task URL badge
+            let taskUrlBadge = '';
+            if (entry.task_url) {
+              let label = 'Task Link';
+              try {
+                const u = new URL(entry.task_url.startsWith('http') ? entry.task_url : `https://${entry.task_url}`);
+                const host = u.hostname.replace(/^www\./, '');
+                const pathname = u.pathname.replace(/\/$/, '');
+                const segs = pathname.split('/').filter(Boolean);
+                const last = segs.pop();
+                label = last && last.length < 24 ? `${host}/…/${last}` : host;
+              } catch {
+                label = 'Task Link ↗';
+              }
+              taskUrlBadge = `
+                <a 
+                  href="${entry.task_url}" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  class="wb-entry-task-link" 
+                  title="Open ${entry.task_url}"
+                  onclick="event.stopPropagation();"
+                >
+                  <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                  <span>${label}</span>
+                </a>
+              `;
+            }
+
+            // Format rich text description preview
+            let richDescHtml = '';
+            if (entry.description) {
+              const plain = entry.description.replace(/<[^>]*>/g, '').trim();
+              const isDifferent = plain && plain.toLowerCase() !== taskName.toLowerCase().trim();
+              const hasTags = /<[a-z][\s\S]*>/i.test(entry.description);
+              if (isDifferent || hasTags) {
+                richDescHtml = `<div class="wb-entry-desc-rich btn-edit-entry-time" data-id="${entry.id}" style="cursor: pointer;" title="Click to edit rich text notes">${entry.description}</div>`;
+              }
+            }
+
+            return `
+              <div class="wb-entry-item" data-id="${entry.id}">
+                <div class="wb-entry-item-left" style="display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; flex: 1; min-width: 0;">
+                  <div style="display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;">
+                    <span class="wb-entry-title btn-edit-entry-time" data-id="${entry.id}" style="cursor: pointer;" title="Click to edit task name, URL & details">
+                      ${taskName}
+                    </span>
+
+                    <div class="wb-entry-client-badge">
+                      <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981;"></span>
+                      <span>${entry.client_name || 'Direct Client'}</span>
+                      ${clientRate ? `<span style="opacity: 0.8; font-family: var(--font-mono); font-size: 0.6875rem;">• ${clientRate}</span>` : ''}
+                    </div>
+
+                    ${taskUrlBadge}
+                  </div>
+
+                  ${richDescHtml}
+                </div>
+
+                <div class="wb-entry-item-right">
+                  ${billableIcon}
+
+                  <!-- Clickable Time Range -->
+                  <button type="button" class="wb-entry-time-pill btn-edit-entry-time" data-id="${entry.id}" title="Click to edit time & date">
+                    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity: 0.6;">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span>${timeRange || 'Set time'}</span>
+                  </button>
+
+                  <!-- Clickable Duration -->
+                  <button type="button" class="wb-entry-duration-pill btn-edit-entry-time" data-id="${entry.id}" title="Click to edit duration & time">
+                    <span>${durationStr}</span>
+                  </button>
+
+                  <span class="wb-entry-amount">
+                    ${entry.billable ? `${sym}${(entry.billable_amount || 0).toFixed(2)}` : '—'}
+                  </span>
+
+                  <div class="wb-entry-actions">
+                    <!-- Edit Entry Button -->
+                    <button class="wb-tracker-icon-btn btn-edit-entry-time" data-id="${entry.id}" title="Edit time, date & details" style="color: #64748b;">
+                      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                      </svg>
+                    </button>
+
+                    <!-- Quick Restart Button -->
+                    <button class="wb-tracker-icon-btn btn-restart-entry" data-id="${entry.id}" title="Continue tracking this task">
+                      <svg width="15" height="15" fill="currentColor" viewBox="0 0 24 24">
+                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                      </svg>
+                    </button>
+
+                    <!-- Delete Button -->
+                    <button class="wb-tracker-icon-btn btn-delete-entry" data-id="${entry.id}" title="Delete entry" style="color: #cbd5e1;">
+                      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join('');
+
+        return `
+          <div class="wb-entry-group">
+            <div class="wb-entry-group-header">
+              <span class="wb-entry-group-date">${label}</span>
+              <div class="wb-entry-group-total">
+                <span>Total: ${dh}:${dm}:${ds}</span>
+                <span style="color: #047857; background: #ecfdf5; padding: 2px 8px; border-radius: 4px;">${groupSym}${dayAmount.toFixed(2)}</span>
+              </div>
+            </div>
+            <div>
+              ${entriesHtml}
+            </div>
+          </div>
+        `;
+      })
+      .join('');
+
+    // Attach actions: Click Time or Duration or Edit Button
+    listContainer.querySelectorAll('.btn-edit-entry-time').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.getAttribute('data-id');
+        const entry = allEntries.find((item) => item.id === id);
+        if (entry) {
+          openTimeEntryModal({
+            entry,
+            clients: availableClients,
+            onSave: () => {
+              loadEntries();
+            }
+          });
+        }
+      });
+    });
+
+    // Attach actions: Quick Restart
+    listContainer.querySelectorAll('.btn-restart-entry').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-id');
+        const entry = allEntries.find((e) => e.id === id);
+        if (!entry) return;
+
+        // Populate tracker bar
+        const client = availableClients.find((c) => c.id === entry.client_id) || {
+          id: entry.client_id,
+          name: entry.client_name,
+          currency: entry.client_currency || 'USD',
+          hourly_rate: entry.client_rate || 100
+        };
+
+        trackerInstance.populate({
+          description: entry.description || entry.task_title,
+          client
+        });
+
+        // Trigger start
+        try {
+          const res = await apiRequest('/tracking/start', {
+            method: 'POST',
+            body: JSON.stringify({
+              description: entry.description || entry.task_title,
+              clientId: entry.client_id,
+              billable: entry.billable !== false
+            })
+          });
+          store.setState('activeSession', res);
+        } catch (err) {
+          alert('Could not restart timer: ' + err.message);
+        }
+      });
+    });
+
+    // Attach actions: Delete Entry
+    listContainer.querySelectorAll('.btn-delete-entry').forEach((btn) => {
+      btn.addEventListener('mouseenter', () => { btn.style.color = '#ef4444'; });
+      btn.addEventListener('mouseleave', () => { btn.style.color = '#cbd5e1'; });
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-id');
+        if (confirm('Are you sure you want to delete this time entry?')) {
+          try {
+            await apiRequest(`/time-entries/${id}`, { method: 'DELETE' });
+            await loadEntries();
+          } catch (err) {
+            alert('Failed to delete entry: ' + err.message);
+          }
+        }
+      });
+    });
+  };
+
+  // Wire filter listeners
+  container.querySelector('#input-entries-search')?.addEventListener('input', () => {
+    renderEntriesList(filterEntries());
+  });
+  container.querySelector('#select-filter-client')?.addEventListener('change', () => {
+    renderEntriesList(filterEntries());
+  });
+  container.querySelector('#select-filter-billable')?.addEventListener('change', () => {
+    renderEntriesList(filterEntries());
+  });
+
+  // Initial load
+  await loadClientsFilter();
+  await loadEntries();
+}

@@ -37,33 +37,14 @@ export function renderSidebar() {
         </div>
       </a>
 
-      <!-- Projects (Collapsible with user requested chevron) -->
-      <div class="sidebar-item ${currentPath.startsWith('/projects') ? 'active' : ''}" id="menu-projects-toggle">
+      <!-- Clients (With hourly rates & currency) -->
+      <a href="/clients" data-link class="sidebar-item ${currentPath.startsWith('/clients') ? 'active' : ''}">
         <div class="sidebar-item-left">
-          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-          <span>Projects</span>
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          <span>Clients</span>
         </div>
-        <span id="projects-arrow-wrapper">
-          <svg class="dropdown-chevron expanded" id="projects-arrow" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="9 18 15 12 9 6"></polyline>
-          </svg>
-        </span>
-      </div>
-
-      <div class="sidebar-submenu" id="submenu-projects" style="display: flex;">
-        <a href="/projects" data-link class="sidebar-subitem ${currentPath === '/projects' ? 'active' : ''}">
-          <span>•</span> All Projects
-        </a>
-        <a href="/board?projectId=proj-1" data-link class="sidebar-subitem">
-          <span>•</span> Cloud Infrastructure
-        </a>
-        <a href="/board?projectId=proj-2" data-link class="sidebar-subitem">
-          <span>•</span> Client Portal V2
-        </a>
-        <a href="/board?projectId=proj-3" data-link class="sidebar-subitem">
-          <span>•</span> Mobile Companion
-        </a>
-      </div>
+        ${chevronSvg}
+      </a>
 
       <!-- Kanban Board -->
       <a href="/board" data-link class="sidebar-item ${currentPath === '/board' ? 'active' : ''}">
@@ -85,11 +66,11 @@ export function renderSidebar() {
 
       <div class="sidebar-group-title">TIME & MONITORING</div>
 
-      <!-- Task Timer Console -->
+      <!-- Time Tracker -->
       <a href="/tracking" data-link class="sidebar-item ${currentPath === '/tracking' ? 'active' : ''}">
         <div class="sidebar-item-left">
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          <span>Task Timer Console</span>
+          <span>Time Tracker</span>
         </div>
       </a>
 
@@ -110,11 +91,11 @@ export function renderSidebar() {
         </div>
       </a>
 
-      <!-- Manual Time Log -->
+      <!-- Time Entries Ledger -->
       <a href="/time-entries" data-link class="sidebar-item ${currentPath === '/time-entries' ? 'active' : ''}">
         <div class="sidebar-item-left">
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-          <span>Manual Time Log</span>
+          <span>Time Entries Ledger</span>
         </div>
       </a>
 
@@ -124,7 +105,7 @@ export function renderSidebar() {
       <a href="/reports" data-link class="sidebar-item ${currentPath === '/reports' ? 'active' : ''}">
         <div class="sidebar-item-left">
           <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-          <span>Project Reports</span>
+          <span>Billing Reports</span>
         </div>
         ${chevronSvg}
       </a>
@@ -182,21 +163,6 @@ export function renderSidebar() {
       </button>
     </div>
   `;
-
-  // Accordion toggle with smooth rotation of user requested chevron
-  const projectsToggle = sidebar.querySelector('#menu-projects-toggle');
-  const submenuProjects = sidebar.querySelector('#submenu-projects');
-  const projectsArrow = sidebar.querySelector('#projects-arrow');
-
-  projectsToggle?.addEventListener('click', () => {
-    const isHidden = submenuProjects.style.display === 'none';
-    submenuProjects.style.display = isHidden ? 'flex' : 'none';
-    if (isHidden) {
-      projectsArrow.classList.add('expanded');
-    } else {
-      projectsArrow.classList.remove('expanded');
-    }
-  });
 
   // Logout action
   sidebar.querySelector('#sidebar-logout-btn')?.addEventListener('click', async () => {

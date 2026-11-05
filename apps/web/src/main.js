@@ -10,6 +10,7 @@ import { renderTopbar } from './components/topbar.js';
 // Project Management & Time Tracking Views
 import { renderAdminDashboardView } from './views/admin-dashboard.js';
 import { renderUserDashboardView } from './views/user-dashboard.js';
+import { renderClientsView } from './views/clients.js';
 import { renderProjectsView } from './views/projects.js';
 import { renderBoardView } from './views/board.js';
 import { renderTasksView } from './views/tasks.js';
@@ -71,7 +72,8 @@ async function bootstrap() {
     const defaultDashboard = res.user.role === 'admin' ? renderAdminDashboardView : renderUserDashboardView;
 
     router.register('/', defaultDashboard);
-    router.register('/projects', renderProjectsView);
+    router.register('/clients', renderClientsView);
+    router.register('/projects', renderClientsView);
     router.register('/board', renderBoardView);
     router.register('/tasks', renderTasksView);
     router.register('/tracking', renderTrackingView);

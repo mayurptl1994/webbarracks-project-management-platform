@@ -22,6 +22,7 @@ export async function renderTasksListView(container) {
           <thead>
             <tr>
               <th>KEY</th>
+              <th>CLIENT</th>
               <th>TASK TITLE</th>
               <th>STATUS</th>
               <th>PRIORITY</th>
@@ -31,7 +32,7 @@ export async function renderTasksListView(container) {
             </tr>
           </thead>
           <tbody id="tasks-table-body">
-            <tr><td colspan="7" style="padding: 2.5rem; text-align: center; color: var(--text-muted);">Loading tasks...</td></tr>
+            <tr><td colspan="8" style="padding: 2.5rem; text-align: center; color: var(--text-muted);">Loading tasks...</td></tr>
           </tbody>
         </table>
       </div>
@@ -84,6 +85,11 @@ export async function renderTasksListView(container) {
         return `
         <tr>
           <td style="font-weight: 700; color: var(--text-muted); font-size: 0.8125rem; font-family: var(--font-mono);">${t.key}</td>
+          <td>
+            <span style="font-size: 0.8125rem; font-weight: 600; color: var(--text-secondary); background: #f1f5f9; padding: 2px 6px; border-radius: var(--radius-sm);">
+              ${t.client_name || 'Direct Client'}
+            </span>
+          </td>
           <td style="font-weight: 600; color: var(--text-primary); font-size: 0.875rem;">${t.title}</td>
           <td>
             <select class="select-inline-status" data-task-id="${t.id}" style="padding: 0.25rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg-surface); font-size: 0.75rem; font-weight: 600;">

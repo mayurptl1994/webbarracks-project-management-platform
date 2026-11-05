@@ -1,6 +1,7 @@
 import { apiRequest } from '../core/api.js';
 import { store } from '../core/store.js';
 import { openModal } from '../components/modal.js';
+import { formatRateWithCurrency, CURRENCY_SYMBOLS } from './clients.js';
 
 export async function renderAdminDashboardView(container) {
   container.innerHTML = `
@@ -28,13 +29,13 @@ export async function renderAdminDashboardView(container) {
       <!-- 4 Stat Summary Cards matching reference visual styling -->
       <div class="grid-4-cols" id="admin-stat-cards">
         <div class="wb-stat-card">
-          <div class="wb-stat-label">ACTIVE PROJECTS</div>
-          <div class="wb-stat-value" id="stat-projects">3</div>
-          <div class="wb-stat-subtext">Cloud, Portal &amp; Mobile</div>
+          <div class="wb-stat-label">ACTIVE CLIENTS</div>
+          <div class="wb-stat-value" id="stat-clients">3</div>
+          <div class="wb-stat-subtext">Hourly tariffs configured</div>
         </div>
 
         <div class="wb-stat-card">
-          <div class="wb-stat-label">OPEN PROJECT TASKS</div>
+          <div class="wb-stat-label">OPEN CLIENT TASKS</div>
           <div class="wb-stat-value" id="stat-tasks">5</div>
           <div class="wb-stat-subtext">2 In Progress • 1 In Review</div>
         </div>
@@ -54,28 +55,28 @@ export async function renderAdminDashboardView(container) {
 
       <!-- 2 Main Cards matching reference layout -->
       <div class="grid-2-cols">
-        <!-- Active Projects & Deliverables Card -->
+        <!-- Active Clients & Tariffs Card -->
         <div class="wb-card">
           <div class="wb-card-header">
             <div>
-              <div class="wb-card-title">Active Projects &amp; Deliverables</div>
-              <div class="wb-card-subtitle">Budgets, delivery milestones and health status</div>
+              <div class="wb-card-title">Clients &amp; Billing Rates</div>
+              <div class="wb-card-subtitle">Active client tariffs, price per hour, and currency</div>
             </div>
-            <a href="/projects" data-link class="btn-wb-outline btn-wb-sm">View All</a>
+            <a href="/clients" data-link class="btn-wb-outline btn-wb-sm">Manage Clients</a>
           </div>
 
           <div style="overflow-x: auto;">
             <table class="wb-table">
               <thead>
                 <tr>
-                  <th>PROJECT &amp; KEY</th>
-                  <th>CLIENT</th>
-                  <th>HEALTH</th>
-                  <th>BURN / BUDGET</th>
+                  <th>CLIENT &amp; COMPANY</th>
+                  <th>CURRENCY</th>
+                  <th>PRICE / HOUR</th>
+                  <th>STATUS</th>
                 </tr>
               </thead>
-              <tbody id="projects-table-body">
-                <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading active projects...</td></tr>
+              <tbody id="clients-table-body">
+                <tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading clients...</td></tr>
               </tbody>
             </table>
           </div>
@@ -132,43 +133,56 @@ export async function renderAdminDashboardView(container) {
   try {
     const stats = await apiRequest('/dashboard/stats');
     if (stats) {
-      container.querySelector('#stat-projects').textContent = stats.activeProjects ?? 3;
+      container.querySelector('#stat-clients').textContent = stats.activeClients ?? 3;
       container.querySelector('#stat-tasks').textContent = stats.openTasks ?? 5;
       container.querySelector('#stat-hours').textContent = (stats.totalTrackedHours ?? 256.5) + 'h';
       container.querySelector('#stat-audits').textContent = stats.totalAuditRecords ?? 166;
     }
 
-    // Load Projects Table
-    const projects = await apiRequest('/projects');
-    const projectsTbody = container.querySelector('#projects-table-body');
-    if (projects && projects.length > 0) {
-      projectsTbody.innerHTML = projects
-        .map((p) => {
-          const healthBadge =
-            p.health === 'on_track'
-              ? `<span class="status-pill-published" style="background: #ecfdf5; color: #047857;">ON TRACK</span>`
-              : `<span class="status-pill-published" style="background: #fffbeb; color: #b45309;">AT RISK</span>`;
+    // Load Clients Table
+    const clients = await apiRequest('/clients');
+    const clientsTbody = container.querySelector('#clients-table-body');
+    if (clients && clients.length > 0) {
+      clientsTbody.innerHTML = clients
+        .map((cl) => {
+          const initial = (cl.name || 'C').charAt(0).toUpperCase();
+          const statusBadge =
+            cl.status === 'active'
+              ? `<span style="display: inline-flex; align-items: center; gap: 5px; color: #10b981; font-weight: 700; font-size: 0.75rem;"><span style="width: 6px; height: 6px; background: #10b981; border-radius: 50%;"></span> Active</span>`
+              : `<span style="display: inline-flex; align-items: center; gap: 5px; color: #64748b; font-weight: 700; font-size: 0.75rem;"><span style="width: 6px; height: 6px; background: #64748b; border-radius: 50%;"></span> Inactive</span>`;
 
-          const burnText =
-            p.budget_type === 'hours'
-              ? `${p.budget_spent || 0}h / ${p.budget_value || 0}h`
-              : `$${(p.budget_spent || 0).toLocaleString()} / $${(p.budget_value || 0).toLocaleString()}`;
+          const rateText = formatRateWithCurrency(cl.hourly_rate, cl.currency);
 
           return `
             <tr>
               <td>
-                <div style="font-weight: 700; color: var(--text-primary); font-size: 0.875rem;">${p.name}</div>
-                <div style="font-family: var(--font-mono); font-size: 0.75rem; color: var(--text-muted);">${p.key}</div>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                  <div style="width: 28px; height: 28px; border-radius: 6px; background: #0f172a; color: #ffffff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.75rem;">
+                    ${initial}
+                  </div>
+                  <div>
+                    <div style="font-weight: 700; color: var(--text-primary); font-size: 0.875rem;">${cl.name}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">${cl.company || 'Direct Client'}</div>
+                  </div>
+                </div>
               </td>
-              <td style="color: var(--text-secondary); font-size: 0.8125rem;">${p.client_name || 'Internal'}</td>
-              <td>${healthBadge}</td>
-              <td style="font-family: var(--font-mono); font-weight: 600; font-size: 0.8125rem;">${burnText}</td>
+              <td>
+                <span class="status-pill-published" style="background: #f1f5f9; color: #0f172a; border: 1px solid #cbd5e1; font-weight: 700; font-family: var(--font-mono);">
+                  ${cl.currency} (${CURRENCY_SYMBOLS[cl.currency] || '$'})
+                </span>
+              </td>
+              <td>
+                <span style="font-family: var(--font-mono); font-weight: 700; font-size: 0.875rem; color: #047857; background: #ecfdf5; padding: 2px 6px; border-radius: var(--radius-sm);">
+                  ${rateText}
+                </span>
+              </td>
+              <td>${statusBadge}</td>
             </tr>
           `;
         })
         .join('');
     } else {
-      projectsTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No active projects.</td></tr>`;
+      clientsTbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No active clients.</td></tr>`;
     }
 
     // Load Audit Logs Table matching screenshot

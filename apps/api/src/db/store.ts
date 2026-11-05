@@ -22,6 +22,19 @@ export interface UserAccount {
   updated_at: string;
 }
 
+export interface ClientItem {
+  id: string;
+  name: string;
+  company?: string;
+  email: string;
+  currency: string; // e.g. 'USD', 'EUR', 'GBP', 'INR', 'AUD', 'CAD'
+  hourly_rate: number; // defined price per hour
+  status: 'active' | 'inactive';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ProjectItem {
   id: string;
   name: string;
@@ -41,6 +54,8 @@ export interface ProjectItem {
 export interface TaskItem {
   id: string;
   project_id: string;
+  client_id?: string;
+  client_name?: string;
   key: string; // e.g. "CLOUD-1"
   title: string;
   description: string;
@@ -63,9 +78,15 @@ export interface ActiveTimeSession {
   project_id: string;
   project_name: string;
   project_key: string;
+  client_id?: string;
+  client_name?: string;
+  client_currency?: string;
   task_id: string;
   task_key: string;
+  task_name?: string;
   task_title: string;
+  task_url?: string;
+  description?: string;
   started_at: string;
   paused_at?: string | null;
   ended_at?: string | null;
@@ -232,10 +253,51 @@ const initialProjects: ProjectItem[] = [
   }
 ];
 
+const initialClients: ClientItem[] = [
+  {
+    id: 'client-1',
+    name: 'Stripe Global Enterprise',
+    company: 'Stripe, Inc.',
+    email: 'billing@stripe.com',
+    currency: 'USD',
+    hourly_rate: 120.0,
+    status: 'active',
+    notes: 'Enterprise account. Monthly invoicing with Net-30 payment terms.',
+    created_at: '2025-01-05T00:00:00.000Z',
+    updated_at: '2025-01-05T00:00:00.000Z'
+  },
+  {
+    id: 'client-2',
+    name: 'Acme Digital Labs',
+    company: 'Acme Corporation',
+    email: 'accounts@acmedigital.io',
+    currency: 'EUR',
+    hourly_rate: 95.0,
+    status: 'active',
+    notes: 'European regional contract. Bi-weekly milestone billings in EUR.',
+    created_at: '2025-01-10T00:00:00.000Z',
+    updated_at: '2025-01-10T00:00:00.000Z'
+  },
+  {
+    id: 'client-3',
+    name: 'Apex Mobility Group',
+    company: 'Apex Mobility Ltd',
+    email: 'finance@apexmobility.co.uk',
+    currency: 'GBP',
+    hourly_rate: 85.0,
+    status: 'active',
+    notes: 'UK mobile development partner. Invoiced in GBP with VAT.',
+    created_at: '2025-01-15T00:00:00.000Z',
+    updated_at: '2025-01-15T00:00:00.000Z'
+  }
+];
+
 const initialTasks: TaskItem[] = [
   {
     id: 'task-1',
     project_id: 'proj-1',
+    client_id: 'client-1',
+    client_name: 'Stripe Global Enterprise',
     key: 'CLOUD-1',
     title: 'Setup Terraform infrastructure modules for VPC and Kubernetes',
     description: 'Reusable Terraform modules for multi-AZ clusters with auto-scaling policies.',
@@ -253,6 +315,8 @@ const initialTasks: TaskItem[] = [
   {
     id: 'task-2',
     project_id: 'proj-1',
+    client_id: 'client-1',
+    client_name: 'Stripe Global Enterprise',
     key: 'CLOUD-2',
     title: 'Configure PostgreSQL replication and read-replicas failover',
     description: 'Set up high-availability database cluster with automated WAL archiving.',
@@ -270,6 +334,8 @@ const initialTasks: TaskItem[] = [
   {
     id: 'task-3',
     project_id: 'proj-2',
+    client_id: 'client-2',
+    client_name: 'Acme Digital Labs',
     key: 'PORTAL-1',
     title: 'High-fidelity UX mockups for client billing dashboard',
     description: 'Design responsive layout with Space Grotesk typography and CSS tokens.',
@@ -287,6 +353,8 @@ const initialTasks: TaskItem[] = [
   {
     id: 'task-4',
     project_id: 'proj-2',
+    client_id: 'client-2',
+    client_name: 'Acme Digital Labs',
     key: 'PORTAL-2',
     title: 'Client invoice PDF & CSV export engine',
     description: 'Group approved billable hours into printable invoice statements.',
@@ -304,6 +372,8 @@ const initialTasks: TaskItem[] = [
   {
     id: 'task-5',
     project_id: 'proj-3',
+    client_id: 'client-3',
+    client_name: 'Apex Mobility Group',
     key: 'MOBILE-1',
     title: 'Electron tray background process and powerMonitor idle detection',
     description: 'Implement tray icon with Quick Pause / Resume and 5-min screenshot deletion grace window.',
@@ -361,6 +431,7 @@ const initialAuditLogs: AuditLogItem[] = [
 
 export class ProjectManagementStore {
   users: UserAccount[] = [...initialUsers];
+  clients: ClientItem[] = [...initialClients];
   projects: ProjectItem[] = [...initialProjects];
   tasks: TaskItem[] = [...initialTasks];
   activeSessions: ActiveTimeSession[] = [];
@@ -373,6 +444,60 @@ export class ProjectManagementStore {
 
   getUserByEmail(email: string) {
     return this.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
+  }
+
+  // Clients & Hourly Rate Management
+  getClients() {
+    return this.clients;
+  }
+
+  getClientById(id: string) {
+    return this.clients.find((c) => c.id === id);
+  }
+
+  createClient(data: Partial<ClientItem>) {
+    const rawRate = typeof data.hourly_rate === 'number' ? data.hourly_rate : parseFloat(String(data.hourly_rate || '0')) || 0;
+    const client: ClientItem = {
+      id: 'client-' + (this.clients.length + 1) + '-' + Date.now().toString(36),
+      name: data.name || 'New Client',
+      company: data.company || '',
+      email: data.email || '',
+      currency: (data.currency || 'USD').toUpperCase(),
+      hourly_rate: Math.max(0, rawRate),
+      status: data.status === 'inactive' ? 'inactive' : 'active',
+      notes: data.notes || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    this.clients.push(client);
+    this.addAuditLog('CLIENT.CREATE', 'webbarracks@gmail.com', `Created client "${client.name}" (${client.currency} ${client.hourly_rate}/hr)`);
+    return client;
+  }
+
+  updateClient(id: string, data: Partial<ClientItem>) {
+    const client = this.getClientById(id);
+    if (!client) return null;
+    if (data.name !== undefined && data.name.trim()) client.name = data.name.trim();
+    if (data.company !== undefined) client.company = data.company;
+    if (data.email !== undefined) client.email = data.email;
+    if (data.currency !== undefined && data.currency.trim()) client.currency = data.currency.trim().toUpperCase();
+    if (data.hourly_rate !== undefined) {
+      const rate = typeof data.hourly_rate === 'number' ? data.hourly_rate : parseFloat(String(data.hourly_rate || '0')) || 0;
+      client.hourly_rate = Math.max(0, rate);
+    }
+    if (data.status !== undefined) client.status = data.status === 'inactive' ? 'inactive' : 'active';
+    if (data.notes !== undefined) client.notes = data.notes;
+    client.updated_at = new Date().toISOString();
+    this.addAuditLog('CLIENT.UPDATE', 'webbarracks@gmail.com', `Updated client "${client.name}" (${client.currency} ${client.hourly_rate}/hr)`);
+    return client;
+  }
+
+  deleteClient(id: string) {
+    const idx = this.clients.findIndex((c) => c.id === id);
+    if (idx === -1) return false;
+    const [removed] = this.clients.splice(idx, 1);
+    this.addAuditLog('CLIENT.DELETE', 'webbarracks@gmail.com', `Deleted client "${removed.name}"`);
+    return true;
   }
 
   // Projects
@@ -417,10 +542,13 @@ export class ProjectManagementStore {
 
   createTask(data: Partial<TaskItem>) {
     const proj = this.getProjectById(data.project_id || '') || this.projects[0];
+    const client = data.client_id ? this.getClientById(data.client_id) : (this.clients[0] || null);
     const taskNumber = this.tasks.filter((t) => t.project_id === proj.id).length + 1;
     const task: TaskItem = {
       id: 'task-' + (this.tasks.length + 1),
       project_id: proj.id,
+      client_id: client ? client.id : undefined,
+      client_name: client ? client.name : undefined,
       key: `${proj.key}-${taskNumber}`,
       title: data.title || 'Untitled Task',
       description: data.description || '',
@@ -456,11 +584,18 @@ export class ProjectManagementStore {
     );
   }
 
-  startTaskTimer(userId: string, taskId: string) {
-    const task = this.getTaskById(taskId);
-    if (!task) throw new Error('Task not found.');
+  startTaskTimer(
+    userId: string,
+    params: string | { taskId?: string; description?: string; taskName?: string; taskUrl?: string; clientId?: string; billable?: boolean }
+  ) {
+    const isString = typeof params === 'string';
+    const taskId = isString ? params : params.taskId;
+    const task = taskId ? this.getTaskById(taskId) : null;
 
-    const proj = this.getProjectById(task.project_id);
+    const clientId = (!isString && params.clientId) ? params.clientId : (task?.client_id || this.clients[0]?.id);
+    const client = clientId ? this.getClientById(clientId) : (this.clients[0] || null);
+
+    const proj = task ? this.getProjectById(task.project_id) : this.projects[0];
     const user = this.getUserById(userId);
 
     // Stop active if running
@@ -469,27 +604,49 @@ export class ProjectManagementStore {
       this.stopTaskTimer(userId);
     }
 
+    const taskName = (!isString && params.taskName && params.taskName.trim())
+      ? params.taskName.trim()
+      : (task?.title || (!isString && params.description && params.description.trim()) || 'General Client Work');
+
+    const taskUrl = (!isString && params.taskUrl) ? params.taskUrl.trim() : '';
+
+    const description = (!isString && params.description && params.description.trim())
+      ? params.description.trim()
+      : `<p>${taskName}</p>`;
+
+    const billable = (!isString && typeof params.billable === 'boolean')
+      ? params.billable
+      : (task?.billable !== false);
+
+    const taskKey = task ? task.key : (client ? client.name.slice(0, 4).toUpperCase() + '-1' : 'TRK-1');
+
     const session: ActiveTimeSession = {
       id: randomUUID(),
       user_id: userId,
       user_name: user?.full_name || 'Member',
-      project_id: task.project_id,
-      project_name: proj?.name || 'Project',
+      project_id: task?.project_id || proj?.id || 'proj-1',
+      project_name: proj?.name || 'Client Engagement',
       project_key: proj?.key || 'PRJ',
-      task_id: task.id,
-      task_key: task.key,
-      task_title: task.title,
+      client_id: client ? client.id : undefined,
+      client_name: client ? client.name : undefined,
+      client_currency: client ? client.currency : 'USD',
+      task_id: task?.id || 'custom-task',
+      task_key: taskKey,
+      task_name: taskName,
+      task_title: taskName,
+      task_url: taskUrl,
+      description: description,
       started_at: new Date().toISOString(),
       duration_seconds: 0,
       status: 'active',
-      billable: task.billable,
-      hourly_rate_snapshot: user?.hourly_bill_rate || 110,
+      billable,
+      hourly_rate_snapshot: client?.hourly_rate || user?.hourly_bill_rate || 110,
       cost_rate_snapshot: user?.hourly_cost_rate || 65,
       created_at: new Date().toISOString()
     };
 
     this.activeSessions.push(session);
-    this.addAuditLog('TIMER.START', user?.email || 'user', `Started timer on ${task.key}`);
+    this.addAuditLog('TIMER.START', user?.email || 'user', `Started timer on ${session.task_title}`);
     return session;
   }
 
@@ -576,3 +733,4 @@ export class ProjectManagementStore {
 }
 
 export const db = new ProjectManagementStore();
+export { ProjectManagementStore as DatabaseStore };

@@ -1,13 +1,14 @@
 import { apiRequest } from '../core/api.js';
+import { CURRENCY_SYMBOLS, formatRateWithCurrency } from './clients.js';
 
 export async function renderReportsView(container) {
   container.innerHTML = `
     <div style="display: flex; flex-direction: column; gap: 1.5rem;">
       <div style="display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
         <div>
-          <h1 style="font-size: 1.625rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">Project Reports &amp; Analytics</h1>
+          <h1 style="font-size: 1.625rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">Client Billing Reports &amp; Analytics</h1>
           <p style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">
-            Time ledger summaries, budget burn, team utilization, and billable margins.
+            Time ledger summaries, client hourly tariffs, currency breakdowns, and billable margins.
           </p>
         </div>
 
@@ -40,16 +41,16 @@ export async function renderReportsView(container) {
         <div class="wb-stat-card">
           <div class="wb-stat-label">ESTIMATED BILLABLE VALUE</div>
           <div class="wb-stat-value" id="rep-billable-val">$18,480</div>
-          <div class="wb-stat-subtext">Snapshot at agreed bill rates</div>
+          <div class="wb-stat-subtext">Snapshot at agreed client rates</div>
         </div>
       </div>
 
-      <!-- Project Breakdown Card -->
+      <!-- Client Breakdown Card -->
       <div class="wb-card">
         <div class="wb-card-header">
           <div>
-            <div class="wb-card-title">Project Hours &amp; Financial Breakdown</div>
-            <div class="wb-card-subtitle">Detailed billable tracking and margins by project</div>
+            <div class="wb-card-title">Client Hours &amp; Financial Breakdown</div>
+            <div class="wb-card-subtitle">Detailed billable tracking and margins by client tariff</div>
           </div>
         </div>
 
@@ -57,7 +58,8 @@ export async function renderReportsView(container) {
           <table class="wb-table">
             <thead>
               <tr>
-                <th>PROJECT</th>
+                <th>CLIENT</th>
+                <th>CURRENCY &amp; HOURLY RATE</th>
                 <th>TOTAL HOURS</th>
                 <th>BILLABLE HOURS</th>
                 <th>BILLABLE RATIO</th>
@@ -65,20 +67,7 @@ export async function renderReportsView(container) {
               </tr>
             </thead>
             <tbody id="report-breakdown-body">
-              <tr>
-                <td><strong>Platform Cloud Migration</strong></td>
-                <td style="font-family: var(--font-mono);">172.5h</td>
-                <td style="font-family: var(--font-mono); color: #10b981;">145.0h</td>
-                <td><span class="status-pill-published" style="background: #ecfdf5; color: #047857;">84% BILLABLE</span></td>
-                <td style="text-align: right; font-family: var(--font-mono); font-weight: 700;">$15,950</td>
-              </tr>
-              <tr>
-                <td><strong>Mobile iOS / Android Agent</strong></td>
-                <td style="font-family: var(--font-mono);">42.0h</td>
-                <td style="font-family: var(--font-mono); color: #10b981;">23.0h</td>
-                <td><span class="status-pill-published" style="background: #fffbeb; color: #b45309;">55% BILLABLE</span></td>
-                <td style="text-align: right; font-family: var(--font-mono); font-weight: 700;">$2,530</td>
-              </tr>
+              <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading billing breakdown...</td></tr>
             </tbody>
           </table>
         </div>
@@ -103,7 +92,7 @@ export async function renderReportsView(container) {
     }
   });
 
-  // Dynamic fetch if available
+  // Dynamic fetch
   try {
     const summary = await apiRequest('/reports/summary');
     if (summary) {
@@ -111,6 +100,42 @@ export async function renderReportsView(container) {
       container.querySelector('#rep-billable-hours').textContent = `${summary.billableHours}h`;
       container.querySelector('#rep-efficiency').textContent = `${summary.billableEfficiency}%`;
       container.querySelector('#rep-billable-val').textContent = `$${summary.totalBillableAmount.toLocaleString()}`;
+
+      const tbody = container.querySelector('#report-breakdown-body');
+      const breakdown = summary.clientBreakdown || [];
+
+      if (breakdown.length > 0) {
+        tbody.innerHTML = breakdown
+          .map((item) => {
+            const sym = CURRENCY_SYMBOLS[item.currency] || '$';
+            const ratio = item.hours > 0 ? Math.round((item.billable / item.hours) * 100) : 0;
+            const rateStr = formatRateWithCurrency(item.hourlyRate, item.currency);
+
+            return `
+              <tr>
+                <td><strong>${item.name}</strong></td>
+                <td>
+                  <span style="font-family: var(--font-mono); font-weight: 700; color: #047857; background: #ecfdf5; padding: 2px 6px; border-radius: var(--radius-sm); font-size: 0.8125rem;">
+                    ${rateStr}
+                  </span>
+                </td>
+                <td style="font-family: var(--font-mono);">${item.hours}h</td>
+                <td style="font-family: var(--font-mono); color: #10b981;">${item.billable}h</td>
+                <td>
+                  <span class="status-pill-published" style="background: ${ratio >= 75 ? '#ecfdf5' : '#fffbeb'}; color: ${ratio >= 75 ? '#047857' : '#b45309'};">
+                    ${ratio}% BILLABLE
+                  </span>
+                </td>
+                <td style="text-align: right; font-family: var(--font-mono); font-weight: 700;">
+                  ${sym}${item.amount.toLocaleString()}
+                </td>
+              </tr>
+            `;
+          })
+          .join('');
+      } else {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">No client billing records found.</td></tr>`;
+      }
     }
   } catch (err) {
     console.warn('Reports summary loaded with static defaults:', err);

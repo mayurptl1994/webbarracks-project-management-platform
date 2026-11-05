@@ -90,6 +90,8 @@ api.get('/auth/me', (c) => {
 
 // ==================== DASHBOARD METRICS ====================
 api.get('/dashboard/stats', (c) => {
+  const activeClients = db.getClients().filter((cl) => cl.status === 'active').length;
+  const totalClients = db.getClients().length;
   const activeProjects = db.projects.filter((p) => p.status === 'active').length;
   const openTasks = db.tasks.filter((t) => t.status !== 'done').length;
   const activeSessionsCount = db.activeSessions.filter((s) => s.status === 'active').length;
@@ -101,6 +103,8 @@ api.get('/dashboard/stats', (c) => {
     .reduce((acc, p) => acc + (p.budget_spent || 0), 0);
 
   return c.json({
+    activeClients,
+    totalClients,
     activeProjects,
     openTasks,
     totalTrackedHours: Math.round(totalTrackedHours * 10) / 10,
@@ -108,6 +112,44 @@ api.get('/dashboard/stats', (c) => {
     totalAuditRecords,
     activeMembers: db.users.filter((u) => u.is_active).length
   });
+});
+
+// ==================== CLIENTS ====================
+api.get('/clients', (c) => {
+  return c.json(db.getClients());
+});
+
+api.get('/clients/:id', (c) => {
+  const client = db.getClientById(c.req.param('id'));
+  if (!client) return c.json({ error: 'Client not found' }, 404);
+  return c.json(client);
+});
+
+api.post('/clients', async (c) => {
+  const user = getAuthenticatedUser(c);
+  const body = await c.req.json();
+  if (!body.name || !body.name.trim()) {
+    return c.json({ error: 'Client name is required.' }, 400);
+  }
+  const client = db.createClient(body);
+  return c.json(client, 201);
+});
+
+api.put('/clients/:id', async (c) => {
+  const user = getAuthenticatedUser(c);
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const updated = db.updateClient(id, body);
+  if (!updated) return c.json({ error: 'Client not found' }, 404);
+  return c.json(updated);
+});
+
+api.delete('/clients/:id', (c) => {
+  const user = getAuthenticatedUser(c);
+  const id = c.req.param('id');
+  const success = db.deleteClient(id);
+  if (!success) return c.json({ error: 'Client not found' }, 404);
+  return c.json({ success: true, message: 'Client deleted successfully.' });
 });
 
 // ==================== PROJECTS ====================
@@ -200,14 +242,24 @@ api.post('/tracking/start', async (c) => {
     const matched = db.tasks.find(
       (t) => t.id === body.targetName || t.key.toLowerCase() === targetStr || t.title.toLowerCase().includes(targetStr) || targetStr.includes(t.key.toLowerCase())
     );
-    taskId = matched ? matched.id : db.tasks[0]?.id;
-  }
-  if (!taskId) {
-    taskId = db.tasks[0]?.id || 'task-1';
+    taskId = matched ? matched.id : undefined;
   }
 
+  const description = body.description || body.targetName || '';
+  const taskName = body.task_name || body.taskName || description || 'General Client Work';
+  const taskUrl = body.task_url || body.taskUrl || '';
+  const clientId = body.clientId;
+  const billable = body.billable !== false;
+
   try {
-    const session = db.startTaskTimer(user.id, taskId);
+    const session = db.startTaskTimer(user.id, {
+      taskId,
+      taskName,
+      taskUrl,
+      description,
+      clientId,
+      billable
+    });
     return c.json(
       {
         ...session,
@@ -244,8 +296,48 @@ api.post('/tracking/stop', (c) => {
   const user = getAuthenticatedUser(c);
   const stopped = db.stopTaskTimer(user.id);
   if (!stopped) return c.json({ error: 'No active tracking session to stop' }, 400);
+
+  const duration = Math.max(1, stopped.duration_seconds || 1);
+  const hours = Math.round((duration / 3600) * 100) / 100;
+  const rate = stopped.hourly_rate_snapshot || 100;
+  const amount = stopped.billable ? Math.round(hours * rate * 100) / 100 : 0;
+
+  const now = new Date();
+  const startTime = new Date(stopped.started_at);
+  const fmtTime = (d: Date) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  const taskName = stopped.task_name || stopped.task_title || 'General Client Work';
+  const taskUrl = stopped.task_url || '';
+  const desc = stopped.description || `<p>${taskName}</p>`;
+
+  const entry = {
+    id: `entry-${Date.now()}`,
+    user_name: user.full_name || 'WebBarracks Super Admin',
+    user_id: user.id,
+    task_key: stopped.task_key || 'TRK-1',
+    task_name: taskName,
+    task_title: taskName,
+    task_url: taskUrl,
+    description: desc,
+    client_id: stopped.client_id,
+    client_name: stopped.client_name || 'Stripe Global Enterprise',
+    client_currency: stopped.client_currency || 'USD',
+    client_rate: rate,
+    date: new Date().toISOString().slice(0, 10),
+    start_time: fmtTime(startTime),
+    end_time: fmtTime(now),
+    hours: hours || 0.1,
+    duration_seconds: duration,
+    billable: stopped.billable,
+    billable_amount: amount,
+    status: 'approved',
+    created_at: new Date().toISOString()
+  };
+  timeEntriesList.unshift(entry);
+
   return c.json({
     ...stopped,
+    entry,
     target_name: `${stopped.task_key} - ${stopped.task_title}`
   });
 });
@@ -358,42 +450,94 @@ api.post('/timesheets/approve', (c) => {
 });
 
 // ==================== TIME ENTRIES ====================
-const timeEntriesList = [
+const timeEntriesList: any[] = [
   {
     id: 'entry-1',
-    user_name: 'Elena Rostova',
-    project_name: 'Platform Cloud Migration',
-    task_key: 'CLOUD-1',
-    task_title: 'Setup Terraform infrastructure modules for VPC and Kubernetes',
-    date: '2025-02-18',
-    hours: 4.5,
-    duration_seconds: 16200,
+    user_name: 'WebBarracks Super Admin',
+    task_key: 'STRIPE-1',
+    task_name: 'Setup multi-region database replication & failover',
+    task_title: 'Setup multi-region database replication & failover',
+    task_url: 'https://github.com/webbarracks/core/issues/84',
+    description: '<p>Implemented zero-downtime PostgreSQL migrations with <strong>composite B-tree indexes</strong> on workspace partition keys.</p><ul><li>Added concurrent index creation scripts</li><li>Verified query plan under 100k records</li></ul>',
+    client_id: 'client-1',
+    client_name: 'Stripe Global Enterprise',
+    client_currency: 'USD',
+    client_rate: 120.0,
+    date: '2026-11-05',
+    start_time: '09:00 AM',
+    end_time: '11:30 AM',
+    hours: 2.5,
+    duration_seconds: 9000,
     billable: true,
-    status: 'approved'
+    billable_amount: 300.0,
+    status: 'approved',
+    created_at: '2026-11-05T11:30:00.000Z'
   },
   {
     id: 'entry-2',
     user_name: 'WebBarracks Super Admin',
-    project_name: 'NextGen Client Portal',
-    task_key: 'PORTAL-1',
-    task_title: 'Build responsive customer metrics dashboard',
-    date: '2025-02-18',
-    hours: 3.0,
-    duration_seconds: 10800,
+    task_key: 'ACME-1',
+    task_name: 'Client dashboard responsive token architecture',
+    task_title: 'Client dashboard responsive token architecture',
+    task_url: 'https://jira.company.com/browse/ACME-102',
+    description: '<p>Refactored CSS design system tokens and <strong>optimized layout responsiveness</strong> for mobile viewports.</p>',
+    client_id: 'client-2',
+    client_name: 'Acme Digital Labs',
+    client_currency: 'EUR',
+    client_rate: 95.0,
+    date: '2026-11-05',
+    start_time: '01:15 PM',
+    end_time: '02:45 PM',
+    hours: 1.5,
+    duration_seconds: 5400,
     billable: true,
-    status: 'approved'
+    billable_amount: 142.5,
+    status: 'approved',
+    created_at: '2026-11-05T14:45:00.000Z'
   },
   {
     id: 'entry-3',
-    user_name: 'Alex Mercer',
-    project_name: 'Mobile Companion',
-    task_key: 'MOBILE-1',
-    task_title: 'Electron tray background process and idle detection',
-    date: '2025-02-17',
-    hours: 5.0,
-    duration_seconds: 18000,
+    user_name: 'Elena Rostova',
+    task_key: 'APEX-1',
+    task_name: 'Native Electron tray daemon with auto-updater',
+    task_title: 'Native Electron tray daemon with auto-updater',
+    task_url: 'https://jira.atlassian.net/browse/APEX-142',
+    description: '<p>Configured <code>autoUpdater</code> with differential delta packages. Verified memory consumption stays under <strong>45MB</strong> when idling.</p>',
+    client_id: 'client-3',
+    client_name: 'Apex Mobility Group',
+    client_currency: 'GBP',
+    client_rate: 85.0,
+    date: '2026-11-04',
+    start_time: '10:00 AM',
+    end_time: '01:30 PM',
+    hours: 3.5,
+    duration_seconds: 12600,
     billable: true,
-    status: 'approved'
+    billable_amount: 297.5,
+    status: 'approved',
+    created_at: '2026-11-04T13:30:00.000Z'
+  },
+  {
+    id: 'entry-4',
+    user_name: 'Alex Mercer',
+    task_key: 'STRIPE-2',
+    task_name: 'Terraform VPC peering and security group automation',
+    task_title: 'Terraform VPC peering and security group automation',
+    task_url: 'https://linear.app/webbarracks/issue/STRIPE-89',
+    description: '<p>Provisioned isolated database subnets with <strong>strict egress NACLs</strong> and automated route table associations.</p>',
+    client_id: 'client-1',
+    client_name: 'Stripe Global Enterprise',
+    client_currency: 'USD',
+    client_rate: 120.0,
+    date: '2026-11-04',
+    start_time: '02:00 PM',
+    end_time: '04:15 PM',
+    hours: 2.25,
+    duration_seconds: 8100,
+    billable: true,
+    billable_amount: 270.0,
+    status: 'approved',
+    created_at: '2026-11-04T16:15:00.000Z'
   }
 ];
 
@@ -402,34 +546,200 @@ api.get('/time-entries', (c) => {
 });
 
 api.post('/time-entries', async (c) => {
+  const user = getAuthenticatedUser(c);
   const body = await c.req.json();
+
+  let client = body.client_id ? db.getClientById(body.client_id) : null;
+  if (!client && body.client_name) {
+    client = db.getClients().find((cl) => cl.name.toLowerCase() === body.client_name.toLowerCase()) || null;
+  }
+  if (!client) {
+    client = db.getClients()[0] || null;
+  }
+
+  const duration = body.duration_seconds || (Number(body.hours) || 1.0) * 3600;
+  const hours = Math.round((duration / 3600) * 100) / 100;
+  const rate = client ? client.hourly_rate : (user.hourly_bill_rate || 100);
+  const billable = body.billable !== false;
+  const amount = billable ? Math.round(hours * rate * 100) / 100 : 0;
+
+  const taskName = body.task_name || body.task_title || body.description || 'General Client Work';
+  const taskUrl = body.task_url || '';
+  const desc = body.description || `<p>${taskName}</p>`;
+  const taskKey = body.task_key || (client ? client.name.slice(0, 4).toUpperCase() + '-1' : 'TRK-1');
+
   const entry = {
     id: `entry-${Date.now()}`,
-    user_name: 'WebBarracks Super Admin',
-    project_name: body.project_name || 'Platform Cloud Migration',
-    task_key: body.task_key || 'CLOUD-1',
-    task_title: body.task_title || 'General Development',
+    user_name: user.full_name || 'WebBarracks Super Admin',
+    user_id: user.id,
+    task_key: taskKey,
+    task_name: taskName,
+    task_title: taskName,
+    task_url: taskUrl,
+    description: desc,
+    client_id: client ? client.id : undefined,
+    client_name: client ? client.name : 'Stripe Global Enterprise',
+    client_currency: client ? client.currency : 'USD',
+    client_rate: rate,
     date: body.date || new Date().toISOString().slice(0, 10),
-    hours: Number(body.hours) || 2.0,
-    duration_seconds: (Number(body.hours) || 2.0) * 3600,
-    billable: body.billable !== false,
-    status: 'pending'
+    start_time: body.start_time || '09:00 AM',
+    end_time: body.end_time || '10:00 AM',
+    hours,
+    duration_seconds: duration,
+    billable,
+    billable_amount: amount,
+    status: 'approved',
+    created_at: new Date().toISOString()
   };
+
   timeEntriesList.unshift(entry);
-  db.addAuditLog('TIME.MANUAL_ADD', 'webbarracks@gmail.com', `Logged ${entry.hours}h manually`);
+  db.addAuditLog('TIME.ADD', user.email, `Logged ${entry.hours}h on ${entry.task_name}`);
   return c.json(entry, 201);
+});
+
+api.put('/time-entries/:id', async (c) => {
+  const user = getAuthenticatedUser(c);
+  const id = c.req.param('id');
+  const index = timeEntriesList.findIndex((e) => e.id === id);
+  if (index === -1) return c.json({ error: 'Entry not found' }, 404);
+
+  const body = await c.req.json();
+  const existing = timeEntriesList[index];
+
+  let client = existing.client_id ? db.getClientById(existing.client_id) : null;
+  if (body.client_id) {
+    const found = db.getClientById(body.client_id);
+    if (found) client = found;
+  }
+
+  const rate = client ? client.hourly_rate : (existing.client_rate || user.hourly_bill_rate || 100);
+
+  let duration = existing.duration_seconds;
+  if (body.duration_seconds !== undefined) {
+    duration = Math.max(0, Number(body.duration_seconds));
+  } else if (body.hours !== undefined) {
+    duration = Math.max(0, Number(body.hours) * 3600);
+  }
+
+  const hours = Math.round((duration / 3600) * 100) / 100;
+  const billable = body.billable !== undefined ? Boolean(body.billable) : existing.billable;
+  const amount = billable ? Math.round(hours * rate * 100) / 100 : 0;
+
+  const taskName = body.task_name || body.task_title || existing.task_name || existing.task_title || 'General Client Work';
+  const taskUrl = body.task_url !== undefined ? body.task_url : (existing.task_url || '');
+  const desc = body.description !== undefined ? body.description : (existing.description || existing.task_title);
+
+  const updated = {
+    ...existing,
+    ...body,
+    task_name: taskName,
+    task_title: taskName,
+    task_url: taskUrl,
+    description: desc,
+    hours,
+    duration_seconds: duration,
+    billable,
+    billable_amount: amount,
+    client_id: client ? client.id : existing.client_id,
+    client_name: client ? client.name : existing.client_name,
+    client_currency: client ? client.currency : existing.client_currency,
+    client_rate: rate,
+    date: body.date || existing.date,
+    start_time: body.start_time !== undefined ? body.start_time : existing.start_time,
+    end_time: body.end_time !== undefined ? body.end_time : existing.end_time,
+    updated_at: new Date().toISOString()
+  };
+
+  timeEntriesList[index] = updated;
+  db.addAuditLog('TIME.UPDATE', user.email, `Updated time entry ${updated.task_name} (${updated.date} ${updated.start_time}-${updated.end_time}, ${updated.hours}h)`);
+  return c.json(updated);
+});
+
+api.patch('/time-entries/:id', async (c) => {
+  const user = getAuthenticatedUser(c);
+  const id = c.req.param('id');
+  const index = timeEntriesList.findIndex((e) => e.id === id);
+  if (index === -1) return c.json({ error: 'Entry not found' }, 404);
+
+  const body = await c.req.json();
+  const existing = timeEntriesList[index];
+
+  let client = existing.client_id ? db.getClientById(existing.client_id) : null;
+  if (body.client_id) {
+    const found = db.getClientById(body.client_id);
+    if (found) client = found;
+  }
+
+  const rate = client ? client.hourly_rate : (existing.client_rate || user.hourly_bill_rate || 100);
+
+  let duration = existing.duration_seconds;
+  if (body.duration_seconds !== undefined) {
+    duration = Math.max(0, Number(body.duration_seconds));
+  } else if (body.hours !== undefined) {
+    duration = Math.max(0, Number(body.hours) * 3600);
+  }
+
+  const hours = Math.round((duration / 3600) * 100) / 100;
+  const billable = body.billable !== undefined ? Boolean(body.billable) : existing.billable;
+  const amount = billable ? Math.round(hours * rate * 100) / 100 : 0;
+
+  const taskName = body.task_name || body.task_title || existing.task_name || existing.task_title || 'General Client Work';
+  const taskUrl = body.task_url !== undefined ? body.task_url : (existing.task_url || '');
+  const desc = body.description !== undefined ? body.description : (existing.description || existing.task_title);
+
+  const updated = {
+    ...existing,
+    ...body,
+    task_name: taskName,
+    task_title: taskName,
+    task_url: taskUrl,
+    description: desc,
+    hours,
+    duration_seconds: duration,
+    billable,
+    billable_amount: amount,
+    client_id: client ? client.id : existing.client_id,
+    client_name: client ? client.name : existing.client_name,
+    client_currency: client ? client.currency : existing.client_currency,
+    client_rate: rate,
+    date: body.date || existing.date,
+    start_time: body.start_time !== undefined ? body.start_time : existing.start_time,
+    end_time: body.end_time !== undefined ? body.end_time : existing.end_time,
+    updated_at: new Date().toISOString()
+  };
+
+  timeEntriesList[index] = updated;
+  db.addAuditLog('TIME.UPDATE', user.email, `Updated time entry ${updated.task_name} (${updated.date} ${updated.start_time}-${updated.end_time}, ${updated.hours}h)`);
+  return c.json(updated);
+});
+
+api.delete('/time-entries/:id', (c) => {
+  const user = getAuthenticatedUser(c);
+  const id = c.req.param('id');
+  const index = timeEntriesList.findIndex((e) => e.id === id);
+  if (index === -1) return c.json({ error: 'Entry not found' }, 404);
+
+  const [removed] = timeEntriesList.splice(index, 1);
+  db.addAuditLog('TIME.DELETE', user.email, `Deleted time entry ${removed.task_title}`);
+  return c.json({ success: true, message: 'Time entry deleted' });
 });
 
 // ==================== REPORTS ====================
 api.get('/reports/summary', (c) => {
+  const clients = db.getClients();
   return c.json({
     totalTrackedHours: 214.5,
     billableHours: 168.0,
     billableEfficiency: 78,
     totalBillableAmount: 18480,
+    clientBreakdown: [
+      { id: 'client-1', name: 'Stripe Global Enterprise', currency: 'USD', hourlyRate: 120, hours: 172.5, billable: 145.0, amount: 17400 },
+      { id: 'client-2', name: 'Acme Digital Labs', currency: 'EUR', hourlyRate: 95, hours: 28.0, billable: 20.0, amount: 1900 },
+      { id: 'client-3', name: 'Apex Mobility Group', currency: 'GBP', hourlyRate: 85, hours: 14.0, billable: 3.0, amount: 255 }
+    ],
     projectBreakdown: [
-      { name: 'Platform Cloud Migration', hours: 172.5, billable: 145.0, amount: 15950 },
-      { name: 'Mobile iOS / Android Agent', hours: 42.0, billable: 23.0, amount: 2530 }
+      { name: 'Stripe Enterprise Infrastructure', hours: 172.5, billable: 145.0, amount: 15950 },
+      { name: 'Apex Mobility Agent', hours: 42.0, billable: 23.0, amount: 2530 }
     ]
   });
 });
