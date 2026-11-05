@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: webbarracks-api
+    env: node
+    plan: standard
+    buildCommand: npm install && npm run build --workspace=@webbarracks/api
+    startCommand: npm run start --workspace=@webbarracks/api
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: ALLOWED_ORIGIN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false

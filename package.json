@@ -1,0 +1,19 @@
+{
+  "name": "webbarracks-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:api": "npm --workspace=@webbarracks/api run dev",
+    "dev:web": "npm --workspace=@webbarracks/web run dev",
+    "build": "npm --workspaces run build --if-present",
+    "test": "npm --workspace=@webbarracks/shared run test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
