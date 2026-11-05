@@ -11,7 +11,10 @@ const app = new Hono();
 app.use(
   '*',
   cors({
-    origin: (origin) => (origin ? origin : '*'),
+    origin: (origin) => {
+      if (origin) return origin;
+      return 'http://localhost:5173';
+    },
     allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true
@@ -51,10 +54,21 @@ const api = new Hono();
 
 // ==================== AUTHENTICATION ====================
 api.post('/auth/login', async (c) => {
-  const body = await c.req.json();
-  const { email, password } = body;
+  let body: any = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    try {
+      body = await c.req.parseBody();
+    } catch {
+      body = {};
+    }
+  }
 
-  const user = db.getUserByEmail(email);
+  const email = (body.email || '').trim().toLowerCase();
+  const password = (body.password || '').trim();
+
+  const user = db.users.find((u) => u.email.toLowerCase() === email);
   if (!user || user.passwordHash !== password) {
     return c.json({ error: 'Invalid email or password.' }, 401);
   }

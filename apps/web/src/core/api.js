@@ -1,6 +1,7 @@
 import { store } from './store.js';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+// Use relative /api in development to leverage Vite proxy and avoid CORS blocking
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export async function apiRequest(endpoint, options = {}) {
   const user = store.getState('currentUser');
@@ -12,7 +13,7 @@ export async function apiRequest(endpoint, options = {}) {
   };
 
   if (user?.id) {
-    headers['x-demo-user-id'] = user.id;
+    headers['x-user-id'] = user.id;
     headers['Authorization'] = `Bearer ${user.id}`;
   }
 
@@ -40,4 +41,3 @@ export async function apiRequest(endpoint, options = {}) {
 
   return response.json();
 }
-
