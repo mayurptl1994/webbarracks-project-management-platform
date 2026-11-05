@@ -14,3 +14,4 @@ export async function requestLogger(c: Context, next: Next) {
   const path = c.req.path;
   console.log(`[${new Date().toISOString()}] ${method} ${path} - ${status} (${ms}ms) [req:${requestId.slice(0, 8)}]`);
 }
+

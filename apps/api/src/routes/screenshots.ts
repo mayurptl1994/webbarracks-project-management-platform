@@ -88,3 +88,4 @@ screenshotRouter.delete('/:id', requirePermission('screenshots:delete_own'), asy
 
   return c.json({ success: true });
 });
+

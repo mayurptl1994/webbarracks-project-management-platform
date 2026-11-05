@@ -243,3 +243,4 @@ function showEditEntryModal(entryId, currentDuration, currentNote, onDone) {
     }
   });
 }
+

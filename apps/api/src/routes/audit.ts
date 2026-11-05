@@ -9,3 +9,4 @@ auditRouter.get('/', requirePermission('workspace:view_audit_log'), async (c) =>
   const logs = db.getAuditLogs(auth.workspaceId);
   return c.json(logs);
 });
+

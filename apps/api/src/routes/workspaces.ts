@@ -51,3 +51,4 @@ workspaceRouter.put('/members/:userId/role', requirePermission('workspace:manage
 
   return c.json(updated);
 });
+

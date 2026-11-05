@@ -10,3 +10,4 @@ export const config = {
   supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
   isProduction: process.env.NODE_ENV === 'production'
 };
+

@@ -90,3 +90,4 @@ FROM public.workspace_members wm
 JOIN public.profiles p ON p.id = wm.user_id
 LEFT JOIN public.time_entries te ON te.user_id = wm.user_id AND te.workspace_id = wm.workspace_id AND te.ended_at IS NOT NULL
 GROUP BY wm.workspace_id, wm.user_id, p.full_name, p.email, p.working_hours_per_week, DATE_TRUNC('week', te.started_at AT TIME ZONE 'UTC');
+

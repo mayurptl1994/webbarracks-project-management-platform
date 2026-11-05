@@ -50,3 +50,4 @@ authRouter.post('/demo-switch', async (c) => {
     effectivePermissions: Array.from(perms)
   });
 });
+

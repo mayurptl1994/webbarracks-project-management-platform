@@ -142,3 +142,4 @@ projectRouter.put('/:id', requirePermission('project:edit'), async (c) => {
 
   return c.json(updated);
 });
+

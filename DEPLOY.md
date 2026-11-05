@@ -120,3 +120,4 @@ Vercel hosts the static ES module assets with high-speed edge distribution.
 - [x] **Rate Snapshots**: Hourly bill and cost rates snapshot onto each time entry upon creation so historical financials remain immutable.
 - [x] **Concurrence & Active Timers**: Partial unique constraint (`idx_unique_active_timer_per_user`) strictly prevents more than one running timer per user globally.
 - [x] **Tamper-Evident Edits**: Any manual time entry modification requires an explicit `edit_reason` recorded in `time_entry_edits` and `audit_logs`.
+

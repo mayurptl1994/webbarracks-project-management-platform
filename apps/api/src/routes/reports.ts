@@ -182,3 +182,4 @@ reportRouter.get('/export/csv', requirePermission('reports:export'), async (c) =
   c.header('Content-Disposition', 'attachment; filename="webbarracks-time-report.csv"');
   return c.text(csv);
 });
+

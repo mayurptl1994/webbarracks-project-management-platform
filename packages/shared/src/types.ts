@@ -206,3 +206,4 @@ export interface AuthSession {
   workspaceRole: WorkspaceRole;
   effectivePermissions: Permission[];
 }
+

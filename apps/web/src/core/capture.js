@@ -136,3 +136,4 @@ class ScreenCaptureManager {
 }
 
 export const captureManager = new ScreenCaptureManager();
+

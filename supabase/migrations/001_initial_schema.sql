@@ -386,3 +386,4 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
   ip_address TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+

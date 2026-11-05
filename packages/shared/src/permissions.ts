@@ -295,3 +295,4 @@ export function hasPermission(
 ): boolean {
   return effectivePermissions.has(required);
 }
+

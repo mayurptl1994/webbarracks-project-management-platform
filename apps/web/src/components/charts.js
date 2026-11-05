@@ -101,3 +101,4 @@ export function renderDonutChart(data, options = {}) {
     </div>
   `;
 }
+

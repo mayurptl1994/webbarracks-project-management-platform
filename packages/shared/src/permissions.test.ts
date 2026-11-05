@@ -46,3 +46,4 @@ describe('RBAC Permission Matrix & Resolver', () => {
     expect(hasPermission(perms, 'task:comment')).toBe(true);
   });
 });
+

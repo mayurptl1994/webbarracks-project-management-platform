@@ -167,3 +167,4 @@ taskRouter.post('/:id/comments', requirePermission('task:comment'), async (c) =>
 
   return c.json({ ...comment, user }, 201);
 });
+

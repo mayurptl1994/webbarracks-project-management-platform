@@ -87,3 +87,4 @@ export async function renderSettingsView(container) {
     </div>
   `;
 }
+

@@ -294,3 +294,4 @@ CREATE POLICY "Screenshot storage upload policy"
     bucket_id = 'screenshots' AND
     auth.role() = 'authenticated'
   );
+

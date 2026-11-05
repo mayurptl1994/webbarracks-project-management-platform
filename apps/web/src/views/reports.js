@@ -221,3 +221,4 @@ export async function renderReportsView(container) {
   // Initial load
   await loadSummaryReport();
 }
+

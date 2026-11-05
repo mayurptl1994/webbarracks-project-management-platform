@@ -73,3 +73,4 @@ npm run dev
 - **WebSocket Server**: `ws://localhost:3001/ws`
 
 Use the **Role Persona Switcher** dropdown in the top-right header to instantly test and verify permissions as Owner, Admin, Manager, Member, or Client.
+

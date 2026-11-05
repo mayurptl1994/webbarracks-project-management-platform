@@ -78,3 +78,4 @@ dashboardRouter.get('/summary', async (c) => {
     projects: projects.slice(0, 5)
   });
 });
+

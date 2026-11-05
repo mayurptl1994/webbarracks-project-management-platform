@@ -27,3 +27,4 @@ export function requirePermission(permission: Permission) {
     await next();
   };
 }
+

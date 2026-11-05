@@ -219,3 +219,4 @@ timeRouter.put('/entries/:id', requirePermission('time:edit_own'), async (c) => 
 
   return c.json(entry);
 });
+

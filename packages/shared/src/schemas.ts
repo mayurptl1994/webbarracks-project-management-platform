@@ -122,3 +122,4 @@ export const AddCommentSchema = z.object({
   content: z.string().min(1).max(2000),
   is_internal: z.boolean().default(false)
 });
+
