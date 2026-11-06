@@ -3,7 +3,6 @@ import { store } from '../core/store.js';
 import { createTrackerBar } from '../components/tracker-bar.js';
 import { CURRENCY_SYMBOLS, formatRateWithCurrency } from './clients.js';
 import { openTimeEntryModal } from '../components/time-entry-modal.js';
-import * as FilePond from 'filepond';
 
 export async function renderTrackingView(container) {
   const user = store.getState('currentUser');
@@ -89,24 +88,6 @@ export async function renderTrackingView(container) {
           </div>
         </div>
       </div>
-
-      <!-- Collapsible Monitoring & File Deliverables Section -->
-      <details style="background: var(--bg-surface); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 1rem 1.25rem; cursor: pointer;">
-        <summary style="font-size: 0.875rem; font-weight: 700; color: var(--text-primary); outline: none; user-select: none;">
-          Session Attachments &amp; Activity Monitoring Info
-        </summary>
-        <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 1rem; cursor: default;">
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: var(--radius-md); padding: 0.75rem 1rem; font-size: 0.8125rem; color: var(--text-secondary);">
-            <strong>Authorized Transparency:</strong> Screen monitoring captures active work sessions at your provisioned frequency (${user?.tracking_permissions?.screenshot_interval_minutes || 5} min). Capture only runs while the timer is actively ticking.
-          </div>
-          <div>
-            <div style="font-size: 0.8125rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-primary);">
-              Upload Deliverable Artifacts (FilePond)
-            </div>
-            <input type="file" class="filepond" id="filepond-uploader" multiple data-max-file-size="10MB" data-max-files="5" />
-          </div>
-        </div>
-      </details>
     </div>
   `;
 
@@ -120,16 +101,6 @@ export async function renderTrackingView(container) {
     }
   });
   trackerMount.appendChild(trackerInstance.element);
-
-  // Initialize FilePond
-  const pondInput = container.querySelector('#filepond-uploader');
-  if (pondInput) {
-    FilePond.create(pondInput, {
-      allowMultiple: true,
-      name: 'deliverables',
-      labelIdle: 'Drag & Drop deliverable diffs, assets, or <span class="filepond--label-action">Browse</span>'
-    });
-  }
 
   // Load and List Entries
   let allEntries = [];

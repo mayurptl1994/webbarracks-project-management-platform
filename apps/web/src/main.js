@@ -1,5 +1,4 @@
 import './styles/tokens.css';
-import 'filepond/dist/filepond.min.css';
 import { store } from './core/store.js';
 import { apiRequest } from './core/api.js';
 import { router } from './core/router.js';
@@ -7,20 +6,12 @@ import { wsClient } from './core/ws.js';
 import { renderSidebar } from './components/sidebar.js';
 import { renderTopbar } from './components/topbar.js';
 
-// Project Management & Time Tracking Views
+// Clean, Focused Views
 import { renderAdminDashboardView } from './views/admin-dashboard.js';
 import { renderUserDashboardView } from './views/user-dashboard.js';
 import { renderClientsView } from './views/clients.js';
-import { renderProjectsView } from './views/projects.js';
-import { renderBoardView } from './views/board.js';
-import { renderTasksView } from './views/tasks.js';
 import { renderTrackingView } from './views/tracking.js';
-import { renderTimesheetsView } from './views/timesheets.js';
-import { renderTimeEntriesView } from './views/time-entries.js';
-import { renderScreenshotsView } from './views/screenshots.js';
 import { renderReportsView } from './views/reports.js';
-import { renderTeamView } from './views/team.js';
-import { renderUsersView } from './views/users.js';
 import { renderAuditView } from './views/audit.js';
 import { renderLoginView } from './views/login.js';
 
@@ -49,7 +40,7 @@ async function bootstrap() {
     // Connect WebSocket
     wsClient.connect();
 
-    // Assemble Shell Layout matching reference screenshot
+    // Assemble Shell Layout
     app.innerHTML = '';
     const sidebar = renderSidebar();
 
@@ -66,23 +57,15 @@ async function bootstrap() {
     app.appendChild(sidebar);
     app.appendChild(mainWrapper);
 
-    // Register Routes for Complete Project Management & Time Tracking
+    // Register Routes for Core Time Tracking & Client Management
     router.setContainer(content);
 
     const defaultDashboard = res.user.role === 'admin' ? renderAdminDashboardView : renderUserDashboardView;
 
     router.register('/', defaultDashboard);
     router.register('/clients', renderClientsView);
-    router.register('/projects', renderClientsView);
-    router.register('/board', renderBoardView);
-    router.register('/tasks', renderTasksView);
     router.register('/tracking', renderTrackingView);
-    router.register('/timesheets', renderTimesheetsView);
-    router.register('/time-entries', renderTimeEntriesView);
-    router.register('/screenshots', renderScreenshotsView);
     router.register('/reports', renderReportsView);
-    router.register('/team', renderTeamView);
-    router.register('/users', renderUsersView);
     router.register('/audit-logs', renderAuditView);
 
     // Navigate to current URL

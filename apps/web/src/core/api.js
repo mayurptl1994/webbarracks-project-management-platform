@@ -6,7 +6,7 @@ import { localDb } from './local-db.js';
  * Persists 100% of data to browser localStorage without needing any backend server.
  */
 export async function apiRequest(endpoint, options = {}) {
-  // Simulate standard micro-tick for natural async UI lifecycle
+  // Simulate micro-tick for natural async lifecycle
   await new Promise((resolve) => setTimeout(resolve, 15));
 
   const method = (options.method || 'GET').toUpperCase();
@@ -19,39 +19,13 @@ export async function apiRequest(endpoint, options = {}) {
     }
   }
 
-  // Normalize endpoint URL (strip query string for routing, extract query params)
-  const [pathname, queryString] = endpoint.replace(/^\/api/, '').split('?');
-  const queryParams = new URLSearchParams(queryString || '');
+  // Normalize endpoint URL
+  const [pathname] = endpoint.replace(/^\/api/, '').split('?');
 
   // 1. Auth routes
-  if (pathname === '/auth/me') {
-    const user = localDb.getCurrentUser();
-    return { user };
-  }
-
-  if (pathname === '/auth/login') {
+  if (pathname === '/auth/me' || pathname === '/auth/login') {
     const user = localDb.getCurrentUser();
     return { user, token: 'local-browser-session-token' };
-  }
-
-  if (pathname === '/auth/users' || pathname === '/users') {
-    if (method === 'GET') {
-      return localDb.getUsers();
-    }
-    if (method === 'POST') {
-      return localDb.createUser(body);
-    }
-  }
-
-  const userMatch = pathname.match(/^\/users\/([^/]+)$/);
-  if (userMatch) {
-    const id = userMatch[1];
-    if (method === 'PUT' || method === 'PATCH') {
-      return localDb.updateUser(id, body);
-    }
-    if (method === 'DELETE') {
-      return localDb.deleteUser(id);
-    }
   }
 
   // 2. Clients routes
@@ -86,8 +60,7 @@ export async function apiRequest(endpoint, options = {}) {
       return localDb.getTimeEntries();
     }
     if (method === 'POST') {
-      const newEntry = localDb.createTimeEntry(body);
-      return newEntry;
+      return localDb.createTimeEntry(body);
     }
   }
 
@@ -126,60 +99,7 @@ export async function apiRequest(endpoint, options = {}) {
     return localDb.getLiveTelemetry();
   }
 
-  if (pathname === '/tracking/screenshots') {
-    return localDb.getScreenshots();
-  }
-
-  const screenshotMatch = pathname.match(/^\/tracking\/screenshots\/([^/]+)$/);
-  if (screenshotMatch && method === 'DELETE') {
-    return localDb.deleteScreenshot(screenshotMatch[1]);
-  }
-
-  if (pathname === '/screenshots/upload') {
-    return { success: true, url: '' };
-  }
-
-  // 5. Tasks & Kanban routes
-  if (pathname === '/tasks') {
-    if (method === 'GET') {
-      return localDb.getTasks();
-    }
-    if (method === 'POST') {
-      return localDb.createTask(body);
-    }
-  }
-
-  const taskStatusMatch = pathname.match(/^\/tasks\/([^/]+)\/status$/);
-  if (taskStatusMatch && (method === 'PUT' || method === 'PATCH')) {
-    return localDb.updateTaskStatus(taskStatusMatch[1], body.status);
-  }
-
-  const taskMatch = pathname.match(/^\/tasks\/([^/]+)$/);
-  if (taskMatch) {
-    const id = taskMatch[1];
-    if (method === 'GET') {
-      const task = localDb.getTasks().find((t) => t.id === id);
-      return task || {};
-    }
-    if (method === 'PUT' || method === 'PATCH') {
-      return localDb.updateTask(id, body);
-    }
-    if (method === 'DELETE') {
-      return localDb.deleteTask(id);
-    }
-  }
-
-  // 6. Projects routes
-  if (pathname === '/projects') {
-    if (method === 'GET') {
-      return localDb.getProjects();
-    }
-    if (method === 'POST') {
-      return localDb.createProject(body);
-    }
-  }
-
-  // 7. Dashboard stats & summary
+  // 5. Dashboard stats & summary
   if (pathname === '/dashboard/stats') {
     return localDb.getDashboardStats();
   }
@@ -188,7 +108,7 @@ export async function apiRequest(endpoint, options = {}) {
     return localDb.getDashboardSummary();
   }
 
-  // 8. Reports summary & export
+  // 6. Reports summary & export
   if (pathname === '/reports/summary') {
     return localDb.getReportsSummary();
   }
@@ -197,26 +117,11 @@ export async function apiRequest(endpoint, options = {}) {
     return localDb.exportCsv();
   }
 
-  // 9. Timesheets routes
-  if (pathname === '/timesheets/grid') {
-    const periodStart = queryParams.get('periodStart');
-    return localDb.getTimesheetsGrid(periodStart);
-  }
-
-  if (pathname === '/timesheets/submit') {
-    return localDb.submitTimesheet(body?.periodStart);
-  }
-
-  if (pathname === '/timesheets/approve') {
-    return localDb.approveTimesheet(body?.periodStart);
-  }
-
-  // 10. Audit logs
+  // 7. Audit logs
   if (pathname === '/audit-logs') {
     return localDb.getAuditLogs();
   }
 
   // Fallback for unknown routes
-  console.warn(`[LocalDB] Unhandled local endpoint: ${method} ${endpoint}`);
   return {};
 }

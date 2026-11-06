@@ -112,16 +112,8 @@ class Router {
     const titles = {
       '/': 'Dashboard',
       '/clients': 'Clients & Tariffs',
-      '/projects': 'Projects',
-      '/board': 'Kanban Board',
-      '/tasks': 'Tasks & Backlog',
-      '/tracking': 'Task Timer Console',
-      '/timesheets': 'Timesheets & Approvals',
-      '/time-entries': 'Manual Time Log',
-      '/screenshots': 'Screen Monitor Gallery',
-      '/reports': 'Project Reports',
-      '/team': 'Team Directory',
-      '/users': 'User Management',
+      '/tracking': 'Time Tracker Console',
+      '/reports': 'Billing Reports',
       '/audit-logs': 'System Audit Trail'
     };
 
