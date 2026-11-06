@@ -61,7 +61,11 @@ export function renderLoginView(container) {
 
       localStorage.setItem('wb_user_id', res.user.id);
       store.setState('currentUser', res.user);
-      window.location.pathname = '/';
+      if (window.location.protocol === 'file:') {
+        window.location.hash = '#/';
+      } else {
+        window.location.pathname = '/';
+      }
       window.location.reload();
     } catch (err) {
       errorEl.textContent = err.message || 'Login failed. Check your credentials.';

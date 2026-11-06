@@ -18,24 +18,32 @@ const STORAGE_KEYS = {
   INITIALIZED: 'wb_db_initialized_v2'
 };
 
+const memoryFallback = new Map();
+
 function getItem(key, fallback = []) {
   try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null;
+    if (raw) return JSON.parse(raw);
+    if (memoryFallback.has(key)) return memoryFallback.get(key);
+    return fallback;
   } catch (err) {
-    console.error(`Error reading ${key} from localStorage:`, err);
+    if (memoryFallback.has(key)) return memoryFallback.get(key);
     return fallback;
   }
 }
 
 function setItem(key, val) {
+  memoryFallback.set(key, val);
   try {
-    localStorage.setItem(key, JSON.stringify(val));
-    // Trigger storage event for same-window listeners
-    window.dispatchEvent(new CustomEvent('wb-local-storage-sync', { detail: { key, val } }));
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(key, JSON.stringify(val));
+    }
   } catch (err) {
-    console.error(`Error writing ${key} to localStorage:`, err);
+    // Graceful fallback to memoryFallback if localStorage quota or file:// sandbox restrictions occur
   }
+  try {
+    window.dispatchEvent(new CustomEvent('wb-local-storage-sync', { detail: { key, val } }));
+  } catch {}
 }
 
 function generateId(prefix = 'item') {
@@ -909,3 +917,4 @@ export class LocalDatabase {
 }
 
 export const localDb = new LocalDatabase();
+

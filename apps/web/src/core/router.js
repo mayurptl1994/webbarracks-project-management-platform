@@ -33,27 +33,46 @@ class Router {
   }
 
   getCurrentPath() {
-    let path = window.location.hash ? window.location.hash.replace(/^#/, '') : window.location.pathname;
-    if (!path || path === '' || path.endsWith('/index.html') || path.endsWith('index.html')) {
-      path = '/';
+    let raw = '';
+    if (window.location.hash) {
+      raw = window.location.hash.replace(/^#/, '');
+    } else if (window.location.protocol !== 'file:') {
+      raw = window.location.pathname;
     }
-    if (!path.startsWith('/')) {
-      path = '/' + path;
+
+    const [path] = (raw || '/').split('?');
+    let clean = path;
+    if (!clean || clean === '' || clean.endsWith('index.html') || clean.includes('index.html')) {
+      clean = '/';
     }
-    return path;
+    if (!clean.startsWith('/')) {
+      clean = '/' + clean;
+    }
+    return clean;
   }
 
   navigate(url) {
+    if (!url) return;
+    const target = url.startsWith('#') ? url.replace(/^#/, '') : url;
     if (window.location.protocol === 'file:') {
-      window.location.hash = url;
+      window.location.hash = '#' + target;
     } else {
-      window.history.pushState(null, '', url);
-      this.resolve();
+      try {
+        window.history.pushState(null, '', target);
+        this.resolve();
+      } catch {
+        window.location.hash = '#' + target;
+      }
     }
   }
 
   resolve() {
     if (!this.container) return;
+
+    if (window.location.protocol === 'file:' && (!window.location.hash || window.location.hash === '')) {
+      window.location.hash = '#/';
+      return;
+    }
 
     const currentPath = this.getCurrentPath();
     let matched = null;
@@ -77,7 +96,7 @@ class Router {
     }
 
     if (!matched) {
-      // Default fallback to first route or dashboard
+      // Default fallback to first route (Dashboard)
       matched = this.routes[0];
     }
 
@@ -114,7 +133,8 @@ class Router {
     document.querySelectorAll('.sidebar-item').forEach((item) => {
       const href = item.getAttribute('href');
       if (href) {
-        if (href === path || (href !== '/' && path.startsWith(href))) {
+        const cleanHref = href.startsWith('#') ? href.replace(/^#/, '') : href;
+        if (cleanHref === path || (cleanHref !== '/' && path.startsWith(cleanHref))) {
           item.classList.add('active');
         } else {
           item.classList.remove('active');
@@ -124,10 +144,13 @@ class Router {
 
     document.querySelectorAll('.sidebar-subitem').forEach((item) => {
       const href = item.getAttribute('href');
-      if (href && (href === path || href.split('?')[0] === path.split('?')[0])) {
-        item.classList.add('active');
-      } else {
-        item.classList.remove('active');
+      if (href) {
+        const cleanHref = href.startsWith('#') ? href.replace(/^#/, '') : href;
+        if (cleanHref === path || cleanHref.split('?')[0] === path.split('?')[0]) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
       }
     });
   }
