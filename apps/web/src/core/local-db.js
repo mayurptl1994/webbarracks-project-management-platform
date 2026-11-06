@@ -308,7 +308,53 @@ export class LocalDatabase {
 
   // --- Time Entries ---
   getTimeEntries() {
-    const entries = getItem(STORAGE_KEYS.ENTRIES, []);
+    let entries = getItem(STORAGE_KEYS.ENTRIES, []);
+    const clients = this.getClients();
+    const defaultClient = clients.find((c) => c.status === 'active') || clients[0];
+
+    let modified = false;
+    entries = entries.map((e) => {
+      let client = e.client_id ? this.getClientById(e.client_id) : null;
+      if (!client && e.client_name && e.client_name !== 'Client') {
+        client = clients.find((c) => c.name.toLowerCase() === e.client_name.toLowerCase()) || null;
+      }
+      if (!client && defaultClient) {
+        client = defaultClient;
+      }
+
+      if (client) {
+        const sec = Number(e.duration_seconds) || (e.hours ? Math.round(e.hours * 3600) : 0);
+        const rate = Number(client.hourly_rate) || 0;
+        const currency = client.currency || 'USD';
+        const billable = e.billable !== false;
+        const correctAmount = billable ? Math.round((sec / 3600) * rate * 100) / 100 : 0;
+
+        if (
+          e.client_id !== client.id ||
+          e.client_rate !== rate ||
+          e.client_currency !== currency ||
+          e.client_name !== client.name ||
+          Math.abs((Number(e.billable_amount) || 0) - correctAmount) > 0.01
+        ) {
+          modified = true;
+          return {
+            ...e,
+            client_id: client.id,
+            client_name: client.name,
+            client_currency: currency,
+            client_rate: rate,
+            client_color: client.color || '#10b981',
+            billable_amount: correctAmount
+          };
+        }
+      }
+      return e;
+    });
+
+    if (modified) {
+      setItem(STORAGE_KEYS.ENTRIES, entries);
+    }
+
     return entries.sort((a, b) => {
       const dateDiff = (b.date || '').localeCompare(a.date || '');
       if (dateDiff !== 0) return dateDiff;
@@ -318,12 +364,21 @@ export class LocalDatabase {
 
   createTimeEntry(data) {
     const entries = getItem(STORAGE_KEYS.ENTRIES, []);
-    const client = data.client_id ? this.getClientById(data.client_id) : null;
+    const allClients = this.getClients();
+    let client = data.client_id ? this.getClientById(data.client_id) : null;
+
+    if (!client && data.client_name && data.client_name !== 'Client') {
+      client = allClients.find((c) => c.name.toLowerCase() === data.client_name.toLowerCase()) || null;
+    }
+    if (!client) {
+      client = allClients.find((c) => c.status === 'active') || allClients[0] || null;
+    }
+
     const user = this.getCurrentUser();
 
     const durationSec = Number(data.duration_seconds) || (data.hours ? Math.round(Number(data.hours) * 3600) : 0);
     const hours = Math.round((durationSec / 3600) * 1000) / 1000;
-    const rate = client ? client.hourly_rate : (Number(data.client_rate) || 0);
+    const rate = client ? Number(client.hourly_rate) : (Number(data.client_rate) || 0);
     const currency = client ? client.currency : (data.client_currency || 'USD');
     const billable = data.billable !== undefined ? Boolean(data.billable) : true;
     const billableAmount = billable ? Math.round((durationSec / 3600) * rate * 100) / 100 : 0;
@@ -332,8 +387,8 @@ export class LocalDatabase {
       id: generateId('entry'),
       user_id: user?.id || 'user-admin-1',
       user_name: user?.name || user?.full_name || 'Mayur Patel',
-      client_id: client?.id || data.client_id || null,
-      client_name: client?.name || data.client_name || '',
+      client_id: client?.id || null,
+      client_name: client?.name || data.client_name || 'Direct Client',
       client_color: client?.color || data.client_color || '#10b981',
       client_currency: currency,
       client_rate: rate,
@@ -365,14 +420,31 @@ export class LocalDatabase {
     }
 
     const current = entries[index];
-    const client = data.client_id !== undefined ? this.getClientById(data.client_id) : (current.client_id ? this.getClientById(current.client_id) : null);
+    const allClients = this.getClients();
+    let client = null;
+    if (data.client_id) {
+      client = this.getClientById(data.client_id);
+    } else if (current.client_id) {
+      client = this.getClientById(current.client_id);
+    }
+
+    if (!client && (data.client_name || current.client_name)) {
+      const name = (data.client_name || current.client_name).toLowerCase();
+      if (name !== 'client') {
+        client = allClients.find((c) => c.name.toLowerCase() === name) || null;
+      }
+    }
+
+    if (!client) {
+      client = allClients.find((c) => c.status === 'active') || allClients[0] || null;
+    }
 
     const durationSec = data.duration_seconds !== undefined
       ? Number(data.duration_seconds)
       : (data.hours !== undefined ? Math.round(Number(data.hours) * 3600) : current.duration_seconds);
 
     const hours = Math.round((durationSec / 3600) * 1000) / 1000;
-    const rate = client ? client.hourly_rate : (data.client_rate !== undefined ? Number(data.client_rate) : current.client_rate);
+    const rate = client ? Number(client.hourly_rate) : (data.client_rate !== undefined ? Number(data.client_rate) : current.client_rate);
     const currency = client ? client.currency : (data.client_currency || current.client_currency || 'USD');
     const billable = data.billable !== undefined ? Boolean(data.billable) : current.billable;
     const billableAmount = billable ? Math.round((durationSec / 3600) * (rate || 0) * 100) / 100 : 0;
@@ -391,9 +463,9 @@ export class LocalDatabase {
       end_time: data.end_time || current.end_time,
       duration_seconds: durationSec,
       hours: hours,
-      client_id: client ? client.id : (data.client_id !== undefined ? data.client_id : current.client_id),
-      client_name: client ? client.name : (data.client_name !== undefined ? data.client_name : current.client_name),
-      client_color: client ? client.color : (data.client_color !== undefined ? data.client_color : current.client_color),
+      client_id: client ? client.id : current.client_id,
+      client_name: client ? client.name : current.client_name,
+      client_color: client ? client.color : current.client_color,
       client_currency: currency,
       client_rate: rate,
       billable: billable,
@@ -424,7 +496,15 @@ export class LocalDatabase {
 
   startTimer(data = {}) {
     const clientId = data.client_id || data.clientId;
-    const client = clientId ? this.getClientById(clientId) : null;
+    const allClients = this.getClients();
+    let client = clientId ? this.getClientById(clientId) : null;
+    if (!client && data.client_name && data.client_name !== 'Client') {
+      client = allClients.find((c) => c.name.toLowerCase() === data.client_name.toLowerCase()) || null;
+    }
+    if (!client) {
+      client = allClients.find((c) => c.status === 'active') || allClients[0] || null;
+    }
+
     const user = this.getCurrentUser();
     const nowIso = new Date().toISOString();
 
@@ -435,11 +515,11 @@ export class LocalDatabase {
       task_title: data.task_name || data.task_title || data.description || 'General Client Work',
       task_url: data.task_url || '',
       description: data.description || data.task_name || '',
-      client_id: client?.id || clientId || null,
-      client_name: client?.name || data.client_name || '',
-      client_currency: client?.currency || 'USD',
-      client_rate: client?.hourly_rate || 0,
-      client_color: client?.color || '#10b981',
+      client_id: client ? client.id : null,
+      client_name: client ? client.name : 'Direct Client',
+      client_currency: client ? client.currency : 'USD',
+      client_rate: client ? Number(client.hourly_rate) : 0,
+      client_color: client ? client.color : '#10b981',
       billable: data.billable !== undefined ? Boolean(data.billable) : true,
       status: 'active',
       started_at: nowIso,
@@ -466,16 +546,22 @@ export class LocalDatabase {
     const endTimeFormatted = this.formatTime12H(endIso);
     const dateFormatted = endIso.toISOString().slice(0, 10);
 
+    let client = active.client_id ? this.getClientById(active.client_id) : null;
+    if (!client) {
+      const allClients = this.getClients();
+      client = allClients.find((c) => c.status === 'active') || allClients[0] || null;
+    }
+
     const newEntry = this.createTimeEntry({
       task_name: active.task_name || active.task_title || 'General Client Work',
       task_title: active.task_name || active.task_title || 'General Client Work',
       task_url: active.task_url || '',
       description: active.description || `<p>${active.task_name || 'General Client Work'}</p>`,
-      client_id: active.client_id,
-      client_name: active.client_name,
-      client_currency: active.client_currency,
-      client_rate: active.client_rate,
-      client_color: active.client_color,
+      client_id: client?.id || active.client_id,
+      client_name: client?.name || active.client_name,
+      client_currency: client?.currency || active.client_currency,
+      client_rate: client?.hourly_rate !== undefined ? Number(client.hourly_rate) : active.client_rate,
+      client_color: client?.color || active.client_color,
       billable: active.billable,
       date: dateFormatted,
       start_time: startTimeFormatted,

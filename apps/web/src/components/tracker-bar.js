@@ -379,6 +379,19 @@ export function createTrackerBar({ onEntryLogged } = {}) {
       toggleBtn.disabled = true;
       toggleBtn.textContent = 'STARTING...';
 
+      // Ensure client is selected
+      if (!selectedClient) {
+        if (!clients || clients.length === 0) {
+          try {
+            clients = await apiRequest('/clients');
+          } catch {}
+        }
+        if (clients && clients.length > 0) {
+          selectedClient = clients.find((c) => c.status === 'active') || clients[0];
+          setClient(selectedClient);
+        }
+      }
+
       try {
         const res = await apiRequest('/tracking/start', {
           method: 'POST',
@@ -389,6 +402,9 @@ export function createTrackerBar({ onEntryLogged } = {}) {
             task_url: attachedTaskUrl,
             client_id: selectedClient?.id,
             clientId: selectedClient?.id,
+            client_name: selectedClient?.name,
+            client_currency: selectedClient?.currency,
+            client_rate: selectedClient?.hourly_rate,
             billable: isBillable
           })
         });
@@ -423,6 +439,23 @@ export function createTrackerBar({ onEntryLogged } = {}) {
     manualAddBtn.disabled = true;
     manualAddBtn.textContent = 'SAVING...';
 
+    // Ensure client is selected
+    if (!selectedClient) {
+      if (!clients || clients.length === 0) {
+        try {
+          clients = await apiRequest('/clients');
+        } catch {}
+      }
+      if (clients && clients.length > 0) {
+        selectedClient = clients.find((c) => c.status === 'active') || clients[0];
+        setClient(selectedClient);
+      }
+    }
+
+    const rate = selectedClient ? Number(selectedClient.hourly_rate) : 0;
+    const currency = selectedClient ? selectedClient.currency : 'USD';
+    const billableAmount = isBillable ? Math.round(diffHours * rate * 100) / 100 : 0;
+
     try {
       const res = await apiRequest('/time-entries', {
         method: 'POST',
@@ -432,11 +465,16 @@ export function createTrackerBar({ onEntryLogged } = {}) {
           task_url: attachedTaskUrl,
           description: `<p>${desc}</p>`,
           client_id: selectedClient?.id,
+          client_name: selectedClient?.name,
+          client_currency: currency,
+          client_rate: rate,
+          client_color: selectedClient?.color || '#10b981',
           start_time: startVal,
           end_time: endVal,
           hours: diffHours,
-          duration_seconds: diffHours * 3600,
-          billable: isBillable
+          duration_seconds: Math.round(diffHours * 3600),
+          billable: isBillable,
+          billable_amount: billableAmount
         })
       });
 
