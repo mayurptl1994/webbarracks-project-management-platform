@@ -323,9 +323,11 @@ export function createTrackerBar({ onEntryLogged } = {}) {
     toggleBtn.className = 'wb-tracker-btn-stop';
     toggleBtn.innerHTML = `<span>STOP</span>`;
 
+    const startMs = new Date(startTime).getTime();
+
     const tick = () => {
       const now = Date.now();
-      const elapsed = Math.floor((now - new Date(startTime).getTime()) / 1000);
+      const elapsed = isNaN(startMs) ? 0 : Math.floor((now - startMs) / 1000);
       const totalSec = Math.max(0, initialSec + elapsed);
 
       const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
@@ -348,18 +350,24 @@ export function createTrackerBar({ onEntryLogged } = {}) {
 
   // Start / Stop Click Handler
   toggleBtn.addEventListener('click', async () => {
-    const active = store.getState('activeSession');
+    const rawActive = store.getState('activeSession');
+    const active = rawActive?.session || rawActive;
+    const isCurrentlyActive = Boolean(active && (active.status === 'active' || active.id));
 
-    if (active && active.status === 'active') {
+    if (isCurrentlyActive) {
       // STOP TIMER
       toggleBtn.disabled = true;
       toggleBtn.textContent = 'STOPPING...';
       try {
         const res = await apiRequest('/tracking/stop', { method: 'POST' });
         store.setState('activeSession', null);
+        store.setState('activeTimer', null);
         stopClock();
         descInput.value = '';
+        if (urlInput) urlInput.value = '';
+        syncUrlState();
         if (onEntryLogged) onEntryLogged(res.entry);
+        window.dispatchEvent(new CustomEvent('wb-entry-logged', { detail: { entry: res.entry } }));
       } catch (err) {
         alert('Failed to stop timer: ' + err.message);
       } finally {
@@ -377,14 +385,18 @@ export function createTrackerBar({ onEntryLogged } = {}) {
           body: JSON.stringify({
             description: desc,
             task_name: desc,
+            task_title: desc,
             task_url: attachedTaskUrl,
+            client_id: selectedClient?.id,
             clientId: selectedClient?.id,
             billable: isBillable
           })
         });
 
-        store.setState('activeSession', res);
-        startClock(res.started_at, 0);
+        const session = res?.session || res;
+        store.setState('activeSession', session);
+        store.setState('activeTimer', session);
+        startClock(session.started_at || session.start_time_iso || new Date().toISOString(), 0);
       } catch (err) {
         alert('Failed to start timer: ' + err.message);
         stopClock();
@@ -442,15 +454,20 @@ export function createTrackerBar({ onEntryLogged } = {}) {
 
   // Sync with global store for existing active sessions
   store.subscribe('activeSession', (session) => {
-    if (session && session.status === 'active') {
-      if (session.task_title && !descInput.value) {
-        descInput.value = session.task_title;
+    const rawSession = session?.session || session;
+    if (rawSession && (rawSession.status === 'active' || rawSession.id)) {
+      if (rawSession.task_title && !descInput.value) {
+        descInput.value = rawSession.task_title;
       }
-      if (session.client_id && (!selectedClient || selectedClient.id !== session.client_id)) {
-        const found = clients.find((c) => c.id === session.client_id);
+      if (rawSession.task_url && urlInput && !urlInput.value) {
+        urlInput.value = rawSession.task_url;
+        syncUrlState();
+      }
+      if (rawSession.client_id && (!selectedClient || selectedClient.id !== rawSession.client_id)) {
+        const found = clients.find((c) => c.id === rawSession.client_id);
         if (found) setClient(found);
       }
-      startClock(session.started_at, session.duration_seconds || 0);
+      startClock(rawSession.started_at || rawSession.start_time_iso || new Date().toISOString(), rawSession.duration_seconds || 0);
     } else {
       stopClock();
     }
@@ -458,9 +475,10 @@ export function createTrackerBar({ onEntryLogged } = {}) {
 
   // Initial active session check
   const currentActive = store.getState('activeSession');
-  if (currentActive && currentActive.status === 'active') {
-    if (currentActive.task_title) descInput.value = currentActive.task_title;
-    startClock(currentActive.started_at, currentActive.duration_seconds || 0);
+  const initialSession = currentActive?.session || currentActive;
+  if (initialSession && (initialSession.status === 'active' || initialSession.id)) {
+    if (initialSession.task_title) descInput.value = initialSession.task_title;
+    startClock(initialSession.started_at || initialSession.start_time_iso || new Date().toISOString(), initialSession.duration_seconds || 0);
   }
 
   loadClients();

@@ -71,26 +71,30 @@ export function renderTopbar() {
     window.location.reload();
   });
 
-  // Dynamic monitoring status update
+  // Dynamic tracker status update
   let timerInterval = null;
-  store.subscribe('activeSession', (session) => {
+  store.subscribe('activeSession', (rawSession) => {
+    const session = rawSession?.session || rawSession;
     const badge = topbar.querySelector('#topbar-monitoring-badge');
     const textEl = topbar.querySelector('#topbar-tracking-text');
 
-    if (session && session.status === 'active') {
+    if (session && (session.status === 'active' || session.id)) {
       badge.style.display = 'block';
       clearInterval(timerInterval);
 
+      const startTimeMs = new Date(session.started_at || session.start_time_iso || Date.now()).getTime();
+
       const updateTicker = () => {
         const now = Date.now();
-        const segment = Math.floor((now - new Date(session.started_at).getTime()) / 1000);
-        const totalSec = (session.duration_seconds || 0) + segment;
+        const segment = isNaN(startTimeMs) ? 0 : Math.floor((now - startTimeMs) / 1000);
+        const totalSec = Math.max(0, (session.duration_seconds || 0) + segment);
 
         const hrs = String(Math.floor(totalSec / 3600)).padStart(2, '0');
         const mins = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
         const secs = String(totalSec % 60).padStart(2, '0');
 
-        textEl.textContent = `TRACKING & MONITORING ACTIVE (${hrs}:${mins}:${secs}) - ${session.target_name}`;
+        const taskTitle = session.task_name || session.task_title || 'Active Session';
+        textEl.textContent = `TRACKER TICKING (${hrs}:${mins}:${secs}) • ${taskTitle}`;
       };
 
       updateTicker();

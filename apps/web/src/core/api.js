@@ -83,9 +83,10 @@ export async function apiRequest(endpoint, options = {}) {
 
   if (pathname === '/tracking/start') {
     const res = localDb.startTimer(body);
-    store.setState('activeSession', res.session);
-    store.setState('activeTimer', res.session);
-    return res;
+    const session = res.session || res;
+    store.setState('activeSession', session);
+    store.setState('activeTimer', session);
+    return session;
   }
 
   if (pathname === '/tracking/stop') {

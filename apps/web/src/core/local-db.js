@@ -423,8 +423,10 @@ export class LocalDatabase {
   }
 
   startTimer(data = {}) {
-    const client = data.client_id ? this.getClientById(data.client_id) : null;
+    const clientId = data.client_id || data.clientId;
+    const client = clientId ? this.getClientById(clientId) : null;
     const user = this.getCurrentUser();
+    const nowIso = new Date().toISOString();
 
     const activeSession = {
       id: generateId('session'),
@@ -433,19 +435,21 @@ export class LocalDatabase {
       task_title: data.task_name || data.task_title || data.description || 'General Client Work',
       task_url: data.task_url || '',
       description: data.description || data.task_name || '',
-      client_id: client?.id || data.client_id || null,
+      client_id: client?.id || clientId || null,
       client_name: client?.name || data.client_name || '',
       client_currency: client?.currency || 'USD',
       client_rate: client?.hourly_rate || 0,
       client_color: client?.color || '#10b981',
       billable: data.billable !== undefined ? Boolean(data.billable) : true,
-      start_time_iso: new Date().toISOString(),
+      status: 'active',
+      started_at: nowIso,
+      start_time_iso: nowIso,
       start_time_formatted: this.formatTime12H(new Date())
     };
 
     setItem(STORAGE_KEYS.ACTIVE_TIMER, activeSession);
     this.logAudit('TIMER_STARTED', 'Tracking', `Started timer for ${activeSession.task_name}`);
-    return { session: activeSession };
+    return { session: activeSession, ...activeSession };
   }
 
   stopTimer() {
@@ -454,7 +458,7 @@ export class LocalDatabase {
       return { entry: null, message: 'No active session' };
     }
 
-    const startIso = active.start_time_iso ? new Date(active.start_time_iso) : new Date(Date.now() - 2000);
+    const startIso = active.started_at || active.start_time_iso ? new Date(active.started_at || active.start_time_iso) : new Date(Date.now() - 2000);
     const endIso = new Date();
     const durationSeconds = Math.max(1, Math.round((endIso.getTime() - startIso.getTime()) / 1000));
 
@@ -463,14 +467,15 @@ export class LocalDatabase {
     const dateFormatted = endIso.toISOString().slice(0, 10);
 
     const newEntry = this.createTimeEntry({
-      task_name: active.task_name,
-      task_title: active.task_title,
-      task_url: active.task_url,
-      description: active.description,
+      task_name: active.task_name || active.task_title || 'General Client Work',
+      task_title: active.task_name || active.task_title || 'General Client Work',
+      task_url: active.task_url || '',
+      description: active.description || `<p>${active.task_name || 'General Client Work'}</p>`,
       client_id: active.client_id,
       client_name: active.client_name,
       client_currency: active.client_currency,
       client_rate: active.client_rate,
+      client_color: active.client_color,
       billable: active.billable,
       date: dateFormatted,
       start_time: startTimeFormatted,
@@ -480,7 +485,7 @@ export class LocalDatabase {
 
     setItem(STORAGE_KEYS.ACTIVE_TIMER, null);
     this.logAudit('TIMER_STOPPED', 'Tracking', `Stopped timer: logged ${durationSeconds}s on ${newEntry.task_name}`);
-    return { entry: newEntry };
+    return { entry: newEntry, success: true };
   }
 
   formatTime12H(date) {
