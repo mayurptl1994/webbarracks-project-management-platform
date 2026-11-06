@@ -3,6 +3,17 @@
 -- Seed script for Webbarracks Development & Demo
 -- ==============================================================================
 
+-- 0. Ensure Demo Users exist in Supabase auth.users
+INSERT INTO auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+VALUES
+  ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'alex.owner@webbarracks.dev', crypt('password123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Alex Mercer (Owner)"}', NOW(), NOW()),
+  ('22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'sarah.admin@webbarracks.dev', crypt('password123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Sarah Connor (Admin)"}', NOW(), NOW()),
+  ('33333333-3333-3333-3333-333333333333', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'david.manager@webbarracks.dev', crypt('password123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"David Miller (Manager)"}', NOW(), NOW()),
+  ('44444444-4444-4444-4444-444444444444', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'elena.dev@webbarracks.dev', crypt('password123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Elena Rostova (Dev)"}', NOW(), NOW()),
+  ('55555555-5555-5555-5555-555555555555', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'liam.design@webbarracks.dev', crypt('password123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Liam Vance (Designer)"}', NOW(), NOW()),
+  ('66666666-6666-6666-6666-666666666666', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'rachel.client@clientcorp.com', crypt('password123', gen_salt('bf')), NOW(), '{"provider":"email","providers":["email"]}', '{"full_name":"Rachel Zane (Client)"}', NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;
+
 -- 1. Create Demo Profiles
 INSERT INTO public.profiles (id, email, full_name, timezone, working_hours_per_week)
 VALUES
