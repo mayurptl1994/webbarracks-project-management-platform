@@ -4,7 +4,6 @@ export function renderSidebar() {
   const sidebar = document.createElement('aside');
   sidebar.className = 'wb-sidebar';
 
-  const user = store.getState('currentUser');
   const currentPath = window.location.hash ? window.location.hash.replace(/^#/, '') : window.location.pathname;
 
   const chevronSvg = `
@@ -74,19 +73,6 @@ export function renderSidebar() {
         </div>
       </a>
     </nav>
-
-    <!-- Bottom User Section -->
-    <div class="sidebar-footer">
-      <div class="sidebar-user">
-        <div class="sidebar-avatar">
-          ${user?.avatar ? `<img src="${user.avatar}" alt="Avatar" />` : user?.full_name?.charAt(0) || 'M'}
-        </div>
-        <div class="sidebar-user-info">
-          <div class="sidebar-user-name">${user?.full_name || 'Mayur Patel'}</div>
-          <div class="sidebar-user-role">${(user?.role || 'admin').toUpperCase()}</div>
-        </div>
-      </div>
-    </div>
   `;
 
   // Handle collapsible sidebar toggle

@@ -1,6 +1,5 @@
 import { apiRequest } from '../core/api.js';
 import { store } from '../core/store.js';
-import { createTrackerBar } from '../components/tracker-bar.js';
 import { CURRENCY_SYMBOLS, formatRateWithCurrency } from './clients.js';
 import { openTimeEntryModal } from '../components/time-entry-modal.js';
 
@@ -24,9 +23,6 @@ export async function renderTrackingView(container) {
           </a>
         </div>
       </div>
-
-      <!-- Reference Time Tracker Bar Mount -->
-      <div id="tracker-bar-mount-point"></div>
 
       <!-- Quick Summary Metric Bar -->
       <div class="grid-4-cols" id="tracking-quick-metrics">
@@ -91,20 +87,15 @@ export async function renderTrackingView(container) {
     </div>
   `;
 
-  // Mount the Reference Time Tracker Bar
-  const trackerMount = container.querySelector('#tracker-bar-mount-point');
-  let trackerInstance = null;
-
-  trackerInstance = createTrackerBar({
-    onEntryLogged: () => {
-      loadEntries();
-    }
-  });
-  trackerMount.appendChild(trackerInstance.element);
-
   // Load and List Entries
   let allEntries = [];
   let availableClients = [];
+
+  // Listen for entries logged from the sticky tracker bar
+  const onLogged = () => {
+    loadEntries();
+  };
+  window.addEventListener('wb-entry-logged', onLogged);
 
   const loadClientsFilter = async () => {
     try {

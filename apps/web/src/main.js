@@ -5,6 +5,7 @@ import { router } from './core/router.js';
 import { wsClient } from './core/ws.js';
 import { renderSidebar } from './components/sidebar.js';
 import { renderTopbar } from './components/topbar.js';
+import { createTrackerBar } from './components/tracker-bar.js';
 
 // Clean, Focused Views
 import { renderAdminDashboardView } from './views/admin-dashboard.js';
@@ -48,10 +49,24 @@ async function bootstrap() {
     mainWrapper.className = 'wb-main';
 
     const topbar = renderTopbar();
+
+    // Persistent Sticky Time Tracker Header (visible across all views)
+    const stickyHeader = document.createElement('div');
+    stickyHeader.className = 'wb-sticky-tracker-header';
+    stickyHeader.id = 'sticky-tracker-header';
+
+    const trackerInstance = createTrackerBar({
+      onEntryLogged: (entry) => {
+        window.dispatchEvent(new CustomEvent('wb-entry-logged', { detail: { entry } }));
+      }
+    });
+    stickyHeader.appendChild(trackerInstance.element);
+
     const content = document.createElement('main');
     content.className = 'wb-content';
 
     mainWrapper.appendChild(topbar);
+    mainWrapper.appendChild(stickyHeader);
     mainWrapper.appendChild(content);
 
     app.appendChild(sidebar);
