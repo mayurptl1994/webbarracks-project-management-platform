@@ -10,6 +10,10 @@ class Router {
       this.resolve();
     });
 
+    window.addEventListener('hashchange', () => {
+      this.resolve();
+    });
+
     document.addEventListener('click', (e) => {
       const link = e.target.closest('a[data-link]');
       if (link) {
@@ -28,15 +32,30 @@ class Router {
     this.routes.push({ path, viewHandler });
   }
 
+  getCurrentPath() {
+    let path = window.location.hash ? window.location.hash.replace(/^#/, '') : window.location.pathname;
+    if (!path || path === '' || path.endsWith('/index.html') || path.endsWith('index.html')) {
+      path = '/';
+    }
+    if (!path.startsWith('/')) {
+      path = '/' + path;
+    }
+    return path;
+  }
+
   navigate(url) {
-    window.history.pushState(null, '', url);
-    this.resolve();
+    if (window.location.protocol === 'file:') {
+      window.location.hash = url;
+    } else {
+      window.history.pushState(null, '', url);
+      this.resolve();
+    }
   }
 
   resolve() {
     if (!this.container) return;
 
-    const currentPath = window.location.pathname || '/';
+    const currentPath = this.getCurrentPath();
     let matched = null;
     let params = {};
 
@@ -73,6 +92,7 @@ class Router {
   updateActiveLinks(path) {
     const titles = {
       '/': 'Dashboard',
+      '/clients': 'Clients & Tariffs',
       '/projects': 'Projects',
       '/board': 'Kanban Board',
       '/tasks': 'Tasks & Backlog',
@@ -114,4 +134,3 @@ class Router {
 }
 
 export const router = new Router();
-

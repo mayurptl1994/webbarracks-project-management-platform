@@ -7,7 +7,9 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
+    "start": "npm --workspace=@webbarracks/web run dev",
+    "dev": "npm --workspace=@webbarracks/web run dev",
+    "dev:all": "concurrently \"npm run dev:api\" \"npm run dev:web\"",
     "dev:api": "npm --workspace=@webbarracks/api run dev",
     "dev:web": "npm --workspace=@webbarracks/web run dev",
     "build": "npm --workspaces run build --if-present",

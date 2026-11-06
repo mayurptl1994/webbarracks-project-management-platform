@@ -1,19 +1,45 @@
 import { store } from './store.js';
+import { localDb } from './local-db.js';
 
 class WebSocketClient {
   constructor() {
     this.socket = null;
     this.reconnectTimer = null;
+    this.setupLocalSync();
+  }
+
+  setupLocalSync() {
+    // Cross-tab synchronization
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'wb_db_active_timer') {
+        const active = localDb.getActiveTimer();
+        store.setState('activeSession', active);
+        store.setState('activeTimer', active);
+      }
+    });
+
+    // Same-window custom event synchronization
+    window.addEventListener('wb-local-storage-sync', (e) => {
+      if (e.detail?.key === 'wb_db_active_timer') {
+        const active = localDb.getActiveTimer();
+        store.setState('activeSession', active);
+        store.setState('activeTimer', active);
+      }
+    });
   }
 
   connect() {
-    const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/ws';
+    const wsUrl = import.meta.env.VITE_WS_URL;
+    // If no explicit external WS URL is specified, run purely in client-side mode
+    if (!wsUrl) {
+      console.log('[App] Running in 100% Standalone Local Browser Storage Mode');
+      return;
+    }
 
     try {
       this.socket = new WebSocket(wsUrl);
 
       this.socket.onopen = () => {
-        console.log('[WS] Connected to live updates');
         const user = store.getState('currentUser');
         const ws = store.getState('workspace');
         if (user && ws) {
@@ -31,21 +57,15 @@ class WebSocketClient {
       };
 
       this.socket.onclose = () => {
-        console.log('[WS] Disconnected, attempting reconnect in 3s...');
-        this.scheduleReconnect();
+        // Silently skip retry if offline
       };
 
       this.socket.onerror = () => {
         this.socket?.close();
       };
-    } catch (e) {
-      this.scheduleReconnect();
+    } catch {
+      // Standalone mode
     }
-  }
-
-  scheduleReconnect() {
-    clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => this.connect(), 3000);
   }
 
   send(type, payload) {
@@ -58,13 +78,14 @@ class WebSocketClient {
     if (msg.type === 'presence.update') {
       store.setState('presence', msg.payload);
     } else if (msg.type === 'timer.started' || msg.type === 'timer.stopped') {
-      // Refresh current user active timer if relevant
       const currentUser = store.getState('currentUser');
       if (msg.payload?.entry?.user_id === currentUser?.id) {
         if (msg.type === 'timer.stopped') {
           store.setState('activeTimer', null);
+          store.setState('activeSession', null);
         } else {
           store.setState('activeTimer', msg.payload.entry);
+          store.setState('activeSession', msg.payload.entry);
         }
       }
     }
@@ -72,4 +93,3 @@ class WebSocketClient {
 }
 
 export const wsClient = new WebSocketClient();
-
