@@ -318,7 +318,7 @@ export function openTimeEntryModal({ entry, clients = [], onSave }) {
                   ${isBillable ? 'checked' : ''}
                   style="width: 16px; height: 16px; accent-color: #10b981; cursor: pointer;"
                 />
-                <span id="billable-label-text" style="color: #047857;">Billable ($)</span>
+                <span id="billable-label-text" style="color: #047857;">Billable (${CURRENCY_SYMBOLS[currentClient.currency] || '₹'})</span>
               </label>
             </div>
           </div>
@@ -336,7 +336,7 @@ export function openTimeEntryModal({ entry, clients = [], onSave }) {
           <div style="text-align: right;">
             <div style="font-size: 0.6875rem; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.05em;">Estimated Earnings</div>
             <div id="preview-amount-calc" style="font-size: 1.125rem; font-weight: 700; color: #047857; font-family: var(--font-mono);">
-              $0.00
+              ${CURRENCY_SYMBOLS[currentClient.currency] || '₹'}0.00
             </div>
           </div>
         </div>

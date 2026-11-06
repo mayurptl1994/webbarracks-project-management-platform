@@ -40,7 +40,7 @@ export async function renderTrackingView(container) {
 
         <div class="wb-stat-card">
           <div class="wb-stat-label">BILLABLE EARNINGS</div>
-          <div class="wb-stat-value" id="metric-billable-value" style="color: #047857;">$0.00</div>
+          <div class="wb-stat-value" id="metric-billable-value" style="color: #047857;">—</div>
           <div class="wb-stat-subtext">Calculated at client tariffs</div>
         </div>
 
@@ -71,7 +71,7 @@ export async function renderTrackingView(container) {
             </select>
             <select id="select-filter-billable" style="padding: 0.4rem 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-strong); background: var(--bg-surface); font-size: 0.8125rem;">
               <option value="">All Statuses</option>
-              <option value="billable">Billable Only ($)</option>
+              <option value="billable">Billable Only</option>
               <option value="non_billable">Non-Billable</option>
             </select>
           </div>
@@ -130,8 +130,37 @@ export async function renderTrackingView(container) {
 
   const updateMetrics = (entries) => {
     const totalSec = entries.reduce((acc, e) => acc + (Number(e.duration_seconds) || 0), 0);
-    const billableHours = entries.filter((e) => e.billable).reduce((acc, e) => acc + (Number(e.hours) || 0), 0);
-    const billableAmount = entries.filter((e) => e.billable).reduce((acc, e) => acc + (Number(e.billable_amount) || 0), 0);
+    const billableEntries = entries.filter((e) => e.billable);
+    const billableHours = billableEntries.reduce((acc, e) => acc + (Number(e.hours) || 0), 0);
+
+    // Group billable sums by currency
+    const sumsByCurrency = {};
+    billableEntries.forEach((e) => {
+      const c = (e.client_currency || 'INR').toUpperCase();
+      sumsByCurrency[c] = (sumsByCurrency[c] || 0) + (Number(e.billable_amount) || 0);
+    });
+
+    const activeCurrencies = Object.keys(sumsByCurrency);
+    let billableText = '';
+
+    if (activeCurrencies.length === 1) {
+      const c = activeCurrencies[0];
+      const sym = CURRENCY_SYMBOLS[c] || `${c} `;
+      billableText = `${sym}${sumsByCurrency[c].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    } else if (activeCurrencies.length > 1) {
+      billableText = activeCurrencies
+        .map((c) => {
+          const sym = CURRENCY_SYMBOLS[c] || `${c} `;
+          return `${sym}${sumsByCurrency[c].toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        })
+        .join(' + ');
+    } else {
+      // Default to active client or first available client
+      const defaultClient = availableClients.find((c) => c.status === 'active') || availableClients[0];
+      const fallbackCurr = (defaultClient?.currency || entries[0]?.client_currency || 'INR').toUpperCase();
+      const sym = CURRENCY_SYMBOLS[fallbackCurr] || '₹';
+      billableText = `${sym}0.00`;
+    }
 
     const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
     const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
@@ -139,7 +168,7 @@ export async function renderTrackingView(container) {
 
     container.querySelector('#metric-total-time').textContent = `${h}:${m}:${s}`;
     container.querySelector('#metric-billable-hours').textContent = `${billableHours.toFixed(1)}h`;
-    container.querySelector('#metric-billable-value').textContent = `$${billableAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    container.querySelector('#metric-billable-value').textContent = billableText;
     container.querySelector('#metric-entries-count').textContent = entries.length;
     container.querySelector('#entries-count-badge').textContent = entries.length;
   };
@@ -197,8 +226,8 @@ export async function renderTrackingView(container) {
         const daySec = groupEntries.reduce((acc, e) => acc + (Number(e.duration_seconds) || 0), 0);
         const dayAmount = groupEntries.reduce((acc, e) => acc + (Number(e.billable_amount) || 0), 0);
 
-        const groupCurrencies = [...new Set(groupEntries.map((e) => e.client_currency).filter(Boolean))];
-        const groupSym = groupCurrencies.length === 1 ? (CURRENCY_SYMBOLS[groupCurrencies[0]] || '$') : '$';
+        const groupCurrencies = [...new Set(groupEntries.map((e) => (e.client_currency || 'INR').toUpperCase()).filter(Boolean))];
+        const groupSym = groupCurrencies.length === 1 ? (CURRENCY_SYMBOLS[groupCurrencies[0]] || '₹') : '₹';
 
         const dh = String(Math.floor(daySec / 3600)).padStart(2, '0');
         const dm = String(Math.floor((daySec % 3600) / 60)).padStart(2, '0');
@@ -228,12 +257,12 @@ export async function renderTrackingView(container) {
             const durationStr = `${h}:${m}:${s}`;
 
             const timeRange = entry.start_time && entry.end_time ? `${entry.start_time} - ${entry.end_time}` : '';
-            const currency = entry.client_currency || 'USD';
-            const sym = CURRENCY_SYMBOLS[currency] || '$';
+            const currency = (entry.client_currency || 'INR').toUpperCase();
+            const sym = CURRENCY_SYMBOLS[currency] || '₹';
             const clientRate = entry.client_rate ? `${sym}${entry.client_rate}/hr` : '';
 
             const billableIcon = entry.billable
-              ? `<span style="color: #047857; font-weight: 700; font-size: 0.875rem; background: #ecfdf5; padding: 2px 6px; border-radius: 4px;" title="Billable: ${sym}${(entry.billable_amount || 0).toFixed(2)}">$</span>`
+              ? `<span style="color: #047857; font-weight: 700; font-size: 0.875rem; background: #ecfdf5; padding: 2px 6px; border-radius: 4px;" title="Billable: ${sym}${(entry.billable_amount || 0).toFixed(2)}">${sym}</span>`
               : `<span style="color: #94a3b8; font-size: 0.875rem;" title="Non-billable">⊘</span>`;
 
             const taskName = entry.task_name || entry.task_title || 'General Client Work';

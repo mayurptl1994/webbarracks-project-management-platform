@@ -40,7 +40,7 @@ export async function renderReportsView(container) {
 
         <div class="wb-stat-card">
           <div class="wb-stat-label">ESTIMATED BILLABLE VALUE</div>
-          <div class="wb-stat-value" id="rep-billable-val">$18,480</div>
+          <div class="wb-stat-value" id="rep-billable-val">—</div>
           <div class="wb-stat-subtext">Snapshot at agreed client rates</div>
         </div>
       </div>
@@ -99,10 +99,22 @@ export async function renderReportsView(container) {
       container.querySelector('#rep-total-hours').textContent = `${summary.totalTrackedHours}h`;
       container.querySelector('#rep-billable-hours').textContent = `${summary.billableHours}h`;
       container.querySelector('#rep-efficiency').textContent = `${summary.billableEfficiency}%`;
-      container.querySelector('#rep-billable-val').textContent = `$${summary.totalBillableAmount.toLocaleString()}`;
-
-      const tbody = container.querySelector('#report-breakdown-body');
       const breakdown = summary.clientBreakdown || [];
+      const currencies = [...new Set(breakdown.filter((b) => b.amount > 0).map((b) => (b.currency || 'INR').toUpperCase()).filter(Boolean))];
+      if (currencies.length === 1) {
+        const sym = CURRENCY_SYMBOLS[currencies[0]] || `${currencies[0]} `;
+        container.querySelector('#rep-billable-val').textContent = `${sym}${summary.totalBillableAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      } else if (currencies.length > 1) {
+        const text = breakdown
+          .filter((b) => b.amount > 0)
+          .map((b) => `${CURRENCY_SYMBOLS[b.currency] || b.currency + ' '}${b.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
+          .join(' + ');
+        container.querySelector('#rep-billable-val').textContent = text;
+      } else {
+        const firstCurr = (breakdown[0]?.currency || 'INR').toUpperCase();
+        const sym = CURRENCY_SYMBOLS[firstCurr] || '₹';
+        container.querySelector('#rep-billable-val').textContent = `${sym}${Number(summary.totalBillableAmount || 0).toFixed(2)}`;
+      }
 
       if (breakdown.length > 0) {
         tbody.innerHTML = breakdown
