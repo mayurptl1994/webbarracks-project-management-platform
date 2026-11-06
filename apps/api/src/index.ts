@@ -11,8 +11,8 @@ app.use(
   '*',
   cors({
     origin: (origin) => (origin ? origin : 'http://localhost:5173'),
-    allowHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-workspace-id'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true
   })
 );
